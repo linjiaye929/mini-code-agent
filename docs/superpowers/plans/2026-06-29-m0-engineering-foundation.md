@@ -16,7 +16,7 @@
 |---|---|
 | `pyproject.toml` | Package metadata, dependencies, quality tool configuration |
 | `.python-version` | Local default Python version |
-| `.gitignore` | Generated, secret, cache, build and runtime exclusions |
+| `.gitignore` | Worktree, generated, secret, cache, build and runtime exclusions |
 | `README.md` | Product status, install and M0 usage |
 | `config.example.toml` | Safe file-based configuration example |
 | `.env.example` | Environment variable names without secret values |
@@ -45,7 +45,7 @@
 **Files:**
 - Create: `pyproject.toml`
 - Create: `.python-version`
-- Create: `.gitignore`
+- Modify: `.gitignore`
 - Create: `README.md`
 - Create: `tests/unit/test_package.py`
 - Create: `src/mini_code_agent/__init__.py`
@@ -164,6 +164,7 @@ Create `.python-version`:
 Create `.gitignore`:
 
 ```gitignore
+.worktrees/
 .venv/
 __pycache__/
 *.py[cod]
@@ -210,8 +211,8 @@ Run:
 
 ```powershell
 uv lock
-uv sync --all-groups
-uv run pytest tests/unit/test_package.py -v
+uv sync --all-groups --no-install-project
+uv run --no-sync pytest tests/unit/test_package.py -v
 ```
 
 Expected: FAIL during collection with `ModuleNotFoundError: No module named 'mini_code_agent'`.
@@ -245,7 +246,8 @@ if __name__ == "__main__":
 Run:
 
 ```powershell
-uv run pytest tests/unit/test_package.py -v
+uv sync --all-groups
+uv run --no-sync pytest tests/unit/test_package.py -v
 ```
 
 Expected: PASS.
