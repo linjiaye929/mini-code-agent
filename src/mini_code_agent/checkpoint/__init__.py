@@ -6,6 +6,7 @@ from mini_code_agent.checkpoint.models import (
     CheckpointSnapshot,
     CheckpointStatus,
     ResumeCompatibility,
+    ResumePlan,
     ResumePolicy,
     WorkspaceScanConfig,
 )
@@ -18,6 +19,7 @@ __all__ = [
     "CheckpointSnapshot",
     "CheckpointStatus",
     "ResumeCompatibility",
+    "ResumePlan",
     "ResumePolicy",
     "WorkspaceScanConfig",
     "tool_contract_sha256",

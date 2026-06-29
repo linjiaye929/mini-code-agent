@@ -11,7 +11,21 @@ from uuid import uuid4
 
 from pydantic import SecretStr, ValidationError
 
-from mini_code_agent.checkpoint.models import CheckpointLimits, CheckpointSnapshot
+from mini_code_agent.agent.events import (
+    ContextCompacted,
+    ModelCompleted,
+    ModelStarted,
+    ToolCompleted,
+    ToolStarted,
+)
+from mini_code_agent.checkpoint.models import (
+    CheckpointLimits,
+    CheckpointSnapshot,
+    CheckpointStatus,
+    ResumeCompatibility,
+    ResumePlan,
+    ResumePolicy,
+)
 from mini_code_agent.persistence.checkpoints import (
     SessionCheckpointJournal,
     checkpoint_from_row,
@@ -26,6 +40,7 @@ from mini_code_agent.persistence.models import (
     IDENTIFIER_PATTERN,
     TRACE_SCHEMA_VERSION,
     RunRecord,
+    RunStatus,
     SessionRecord,
     SessionStatus,
     SessionTraceLimits,
@@ -265,7 +280,7 @@ class SqliteSessionTraceStore:
                 """
                 SELECT * FROM checkpoints
                 WHERE session_id = ?
-                ORDER BY created_at DESC, checkpoint_id ASC
+                ORDER BY trace_sequence DESC, checkpoint_id ASC
                 LIMIT ?
                 """,
                 (session_id, limit),
@@ -280,6 +295,95 @@ class SqliteSessionTraceStore:
                 "Checkpoint was not found.",
             )
         return checkpoints[0]
+
+    def analyze_resume(
+        self,
+        session_id: str,
+        checkpoint_id: str,
+        *,
+        compatibility: ResumeCompatibility,
+        policy: ResumePolicy | None = None,
+    ) -> ResumePlan:
+        active_policy = policy or ResumePolicy()
+        verification = self.verify_trace(session_id)
+        checkpoint = self.get_checkpoint(session_id, checkpoint_id)
+        if checkpoint.status is not CheckpointStatus.AVAILABLE:
+            raise PersistenceError(
+                PersistenceErrorCode.CHECKPOINT_STALE,
+                "Checkpoint is not available for Resume.",
+            )
+        latest = self.latest_checkpoint(session_id)
+        if latest.checkpoint_id != checkpoint.checkpoint_id:
+            raise PersistenceError(
+                PersistenceErrorCode.CHECKPOINT_STALE,
+                "Checkpoint is not the latest stable state.",
+            )
+        run = self.get_run(session_id, checkpoint.source_run_id)
+        if run.status is not RunStatus.ACTIVE:
+            raise PersistenceError(
+                PersistenceErrorCode.CHECKPOINT_STALE,
+                "Checkpoint source Run is not active.",
+            )
+        if (
+            checkpoint.tool_contract_sha256 != compatibility.tool_contract_sha256
+            or checkpoint.workspace_sha256 != compatibility.workspace_sha256
+        ):
+            raise PersistenceError(
+                PersistenceErrorCode.RESUME_INCOMPATIBLE,
+                "Checkpoint is incompatible with the current runtime.",
+            )
+
+        requires_model_retry = False
+        requires_read_only_retry = False
+        after_sequence = checkpoint.trace_sequence
+        while after_sequence < verification.event_count:
+            records = self.read_trace(
+                session_id,
+                after_sequence=after_sequence,
+                limit=self._limits.max_query_rows,
+            )
+            if not records:
+                raise _resume_trace_corrupt()
+            for record in records:
+                if record.run_id != checkpoint.source_run_id:
+                    raise _resume_trace_corrupt()
+                event = record.event
+                if isinstance(event, ToolStarted):
+                    if event.side_effect.value != "read_only":
+                        raise PersistenceError(
+                            PersistenceErrorCode.INDETERMINATE_SIDE_EFFECT,
+                            "Resume is blocked by an uncheckpointed side effect.",
+                        )
+                    requires_read_only_retry = True
+                elif isinstance(event, ModelStarted):
+                    requires_model_retry = True
+                elif isinstance(
+                    event,
+                    (ModelCompleted, ToolCompleted, ContextCompacted),
+                ):
+                    pass
+                else:
+                    raise _resume_trace_corrupt()
+            after_sequence = records[-1].sequence
+
+        if (
+            (requires_model_retry and not active_policy.allow_model_retry)
+            or (
+                requires_read_only_retry
+                and not active_policy.allow_read_only_retry
+            )
+        ):
+            raise PersistenceError(
+                PersistenceErrorCode.REPLAY_REQUIRES_APPROVAL,
+                "Resume requires explicit replay approval.",
+            )
+        return ResumePlan(
+            checkpoint=checkpoint,
+            analyzed_event_count=verification.event_count,
+            analyzed_trace_head_sha256=verification.trace_head_sha256,
+            requires_model_retry=requires_model_retry,
+            requires_read_only_retry=requires_read_only_retry,
+        )
 
     def read_trace(
         self,
@@ -377,3 +481,10 @@ def _normalize_secrets(
         if value:
             values.add(value)
     return tuple(sorted(values, key=len, reverse=True))
+
+
+def _resume_trace_corrupt() -> PersistenceError:
+    return PersistenceError(
+        PersistenceErrorCode.TRACE_CORRUPT,
+        "Resume trace state is invalid.",
+    )

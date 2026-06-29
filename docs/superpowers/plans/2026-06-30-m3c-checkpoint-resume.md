@@ -49,7 +49,7 @@ replaying uncheckpointed side effects.
 
 ## Task 5: Resume Eligibility Analysis
 
-**Status:** Pending
+**Status:** Complete
 
 - Verify full Trace and Checkpoint binding.
 - Validate active source Run, availability, Tool fingerprint, and Workspace fingerprint.

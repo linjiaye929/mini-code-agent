@@ -134,6 +134,16 @@ class CheckpointSnapshot(BaseModel):
         return self
 
 
+class ResumePlan(BaseModel):
+    model_config = ConfigDict(extra="forbid", frozen=True)
+
+    checkpoint: CheckpointSnapshot
+    analyzed_event_count: int = Field(ge=1, le=1_000_000)
+    analyzed_trace_head_sha256: str = Field(pattern=_SHA256_PATTERN)
+    requires_model_retry: bool = False
+    requires_read_only_retry: bool = False
+
+
 def _validate_state(
     messages: tuple[Message, ...],
     turns: int,
