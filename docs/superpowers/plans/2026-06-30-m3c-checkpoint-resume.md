@@ -21,7 +21,7 @@ replaying uncheckpointed side effects.
 
 ## Task 2: Bounded Workspace Fingerprint
 
-**Status:** Pending
+**Status:** Complete
 
 - Add deterministic regular-file manifest hashing.
 - Include relative path, mode-independent file bytes, exclusions, and scanner configuration.

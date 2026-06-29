@@ -6,7 +6,9 @@ from mini_code_agent.checkpoint.models import (
     CheckpointStatus,
     ResumeCompatibility,
     ResumePolicy,
+    WorkspaceScanConfig,
 )
+from mini_code_agent.checkpoint.workspace import workspace_sha256
 
 __all__ = [
     "CHECKPOINT_FORMAT_VERSION",
@@ -15,5 +17,7 @@ __all__ = [
     "CheckpointStatus",
     "ResumeCompatibility",
     "ResumePolicy",
+    "WorkspaceScanConfig",
     "tool_contract_sha256",
+    "workspace_sha256",
 ]

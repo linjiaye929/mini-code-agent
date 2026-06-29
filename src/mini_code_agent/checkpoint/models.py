@@ -4,7 +4,7 @@ from datetime import datetime
 from enum import StrEnum
 from typing import Annotated, Literal, Self
 
-from pydantic import BaseModel, ConfigDict, Field, model_validator
+from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
 from mini_code_agent.domain.messages import Message, MessageRole
 from mini_code_agent.providers.base import TokenUsage
@@ -36,6 +36,24 @@ class CheckpointLimits(BaseModel):
         ge=1_024,
         le=4 * 1024 * 1024 * 1024,
     )
+
+
+class WorkspaceScanConfig(BaseModel):
+    model_config = ConfigDict(extra="forbid", frozen=True)
+
+    excluded_directory_names: frozenset[str] = frozenset(
+        {".git", ".venv", ".worktrees", "__pycache__", "node_modules"}
+    )
+
+    @field_validator("excluded_directory_names")
+    @classmethod
+    def validate_excluded_names(cls, names: frozenset[str]) -> frozenset[str]:
+        if any(
+            not name or name in {".", ".."} or "/" in name or "\\" in name or "\x00" in name
+            for name in names
+        ):
+            raise ValueError("workspace exclusions must be directory names")
+        return names
 
 
 class ResumePolicy(BaseModel):
