@@ -4,6 +4,30 @@ All notable changes follow Keep a Changelog. Versions follow Semantic Versioning
 
 ## [Unreleased]
 
+## [0.9.0-alpha.0] - 2026-06-30
+
+### Added
+
+- Stable full-transcript Checkpoints with bounded canonical payloads and integrity hashes.
+- SQLite database schema v2 plus transactional v1-to-v2 migration.
+- Deterministic Tool contract and bounded Workspace fingerprints.
+- Read-only Resume analysis, explicit replay policy, atomic claim, and Runtime restore.
+
+### Changed
+
+- Runtime saves required state before the first Provider request and after complete ToolResult
+  batches.
+- Resume creates a new Run while preserving transcript, counters, usage, and seen ToolCall IDs.
+- `claim_resume` reanalyzes eligibility instead of trusting a caller-constructed plan.
+
+### Security
+
+- Any uncheckpointed write, execute, or network Tool blocks automatic Resume.
+- Tool/Workspace drift, stale plans, concurrent claims, corrupt payloads, and failed claim writes
+  fail closed without partial lifecycle mutation.
+- Checkpoint payloads are bounded plaintext and are explicitly not claimed as encrypted.
+- Provider/read-only replay is opt-in and is not an exactly-once guarantee.
+
 ## [0.8.0-alpha.0] - 2026-06-30
 
 ### Added

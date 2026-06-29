@@ -2,7 +2,7 @@
 
 > 项目状态：M0 工程基础、M1 Agent Core、M1b 双 Provider、M2a 只读 Workspace/Tool
 > Registry、M2b 受治理文件写入、M2c argv 命令执行与 M3a 确定性 Context Budget
-> 及 M3b 版本化 Session/追加式 Trace 已在本地完成；Checkpoint/Resume、Shell 字符串、
+> 、M3b 版本化 Session/追加式 Trace 及 M3c Checkpoint/Resume 已在本地完成；Shell 字符串、
 > OS 沙箱、真实凭证联调、远程 CI 和 GitHub Release 尚未执行。
 >
 > 本文中的功能、性能和指标是目标或验收方案。只有得到代码、测试、CI、Benchmark 或 Release 证据后，才能改写为已完成成果。
@@ -11,7 +11,7 @@
 
 正在从零设计并实现一个面向真实软件工程任务的企业级 Python Mini CodeAgent。项目采用 Framework-light Agent Harness，通过统一 Provider 协议接入 Anthropic Messages 与 OpenAI-compatible Chat Completions，以跨平台 CLI 作为主要交互入口。当前已完成带硬限制和取消传播的 Agent Core、同步/流式模型适配、安全 HTTP 边界，以及由 JSON Schema Tool Registry、跨平台 WorkspaceBoundary、Read/Search、allow/ask/deny Policy、哈希防冲突 Write/Edit 和受治理 argv Command 组成的代码理解、修改与验证链路；每次模型调用前通过确定性 Context Budget 限制请求，并以 SQLite v1 Session/Run projection、required EventJournal、事务式追加 Trace 和 SHA-256 链持久化生命周期证据。
 
-规划能力包括 Checkpoint/Resume，以及 Git、测试、诊断、修复闭环。工程侧以严格类型、自动化测试、Windows/Linux CI、安全模型和 SemVer 发布流程保证可维护性，并为 Skills、Hooks、MCP、Subagent 与 Worktree 扩展提供稳定边界。
+规划能力包括 Git、测试、诊断、修复闭环。工程侧以严格类型、自动化测试、Windows/Linux CI、安全模型和 SemVer 发布流程保证可维护性，并为 Skills、Hooks、MCP、Subagent 与 Worktree 扩展提供稳定边界。
 
 ## 2. 项目定位
 
@@ -41,7 +41,7 @@ Pytest、pytest-asyncio、Coverage、Ruff 与 Pyright；其余技术随对应里
 | 工具系统 | 强类型 Tool Registry、统一 Tool Result/Error |
 | 文件能力 | `pathlib`、`stat/fstat`、SHA-256、`difflib`、原子 Write、唯一匹配 Edit |
 | 命令能力 | `asyncio.subprocess`、argv、process group、`taskkill`、超时/取消/输出限制 |
-| 状态持久化 | stdlib `sqlite3`、schema v1、WAL、foreign key、Session/Run projection、busy timeout |
+| 状态持久化 | stdlib `sqlite3`、schema v2/v1 事务迁移、WAL、foreign key、Session/Run projection、stable Checkpoint、busy timeout |
 | 可观测性 | 类型化 started/completed 事件、required EventJournal、追加式 Trace、usage、SHA-256 链 |
 | Git 闭环 | Git CLI、status/diff、测试发现、诊断反馈、有限次数修复 |
 | 测试与质量 | Pytest、pytest-asyncio、Coverage、Ruff、Pyright |
@@ -79,7 +79,7 @@ Pytest、pytest-asyncio、Coverage、Ruff 与 Pyright；其余技术随对应里
 | 原子文件发布 | 写盘中断可能留下半个源文件，审批界面也不能展示无界内容 | 同目录 `NamedTemporaryFile`、flush/`fsync`、权限位保留、`os.link`/`os.replace`、失败清理、32 KiB diff 上限 | 成功时一次发布完整内容，失败时保留原文件并清理临时文件 | 避免部分写入和临时文件泄漏，控制审批与 ToolResult 体积 | 故障注入、陈旧哈希、大小/NUL/编码、diff 截断和原文件不变测试 |
 | 受治理 argv 命令执行 | 测试/构建需要启动进程，但 shell 字符串带来插值注入、平台转义和失控子进程风险 | `create_subprocess_exec`、critical preview、execute 默认 deny、`executable_glob`、Workspace cwd、最小环境、POSIX process group、Windows `taskkill /T /F` | 经显式规则和交互审批运行 argv 命令，返回 exit/stdout/stderr/timeout/overflow，并在取消前清理进程树 | 去除 `shell=True` 解析面，避免 API Key 环境继承、无界输出、超时后父子进程残留和 pipe 死锁 | 29 项 Command 单测、7 项 Tool 单测、4 项 Agent 治理集成测试；父子心跳、异常读取和非交互零执行均覆盖 |
 | 确定性 Context Budget | 长任务会超过上下文窗口；直接截断可能拆开调用/结果，或抹掉已完成写操作并诱发重复副作用 | `TokenEstimator` Protocol、canonical JSON UTF-8 估算、Pydantic 预算、原子 ToolCall/ToolResult、只读最近后缀、副作用/未知工具固定、SHA-256 标记、类型化事件 | 每次 Provider I/O 前构造有界 `ContextWindow`；完整 transcript 留在 Runtime，Provider 只看选中历史；固定内容无法容纳时 fail closed | 避免半个工具交换、无界请求、原始省略内容泄漏和因遗忘副作用导致的重复动作；不依赖模型生成摘要 | 18 项 Context 单测、77 项 Context/Runtime/集成测试通过；覆盖 609/610/611 边界、副作用与未知工具固定、零 Provider I/O 失败路径 |
-| Checkpoint/Resume | 网络错误、进程退出和人工中断不应导致全部重跑 | SQLite、版本化 Schema、原子快照、幂等恢复 | 保存会话状态并从中断点继续 | 提高长任务容错和问题复现能力 | 故障注入场景、恢复成功率和耗时待回填 |
+| Checkpoint/Resume | 进程退出不应丢失完整上下文，但从旧 prompt 重跑可能重复真实写入 | SQLite schema v2 事务迁移、稳定 typed transcript、canonical JSON SHA-256、Tool/Workspace fingerprint、增量 Trace 风险扫描、显式 replay policy、原子 claim | 初始及完整 ToolResult 后保存；重开后验证兼容性，将旧 Run 标记 `INTERRUPTED`、新建 Run 并从下一逻辑 turn 继续 | 恢复可重放的 Provider/只读中断；阻断未纳入快照的 write/execute/network；防止伪造 plan、并发双 claim 和 stale TOCTOU | 14 项 Resume 分析/claim 单测与 2 项进程边界集成测试；并发 claim 连续 5 次均一个 winner；真实治理写入后 Resume 阻断且文件/审批各一次 |
 | 版本化 Session 与追加式 Trace | 进程退出后纯内存事件不可查询；若 Trace 与状态分开写会出现索引/正文不一致，静默持久化失败还会继续产生副作用 | SQLite schema v1、WAL、`BEGIN IMMEDIATE`、foreign key、Session/Run materialized projection、UUID event ID、canonical JSON、SHA-256 前驱链、required `EventJournal`、bounded busy timeout | 单事务追加 typed lifecycle event 并更新 Run/Session；Provider/Tool 前记录 Started，完成后记录 Completed；支持重开查询、分页读取和全链验证 | 消除 Trace/投影跨文件提交缝隙，将持久化故障转化为 `PERSISTENCE_ERROR`，用 started-only 状态标记不确定副作用，阻止后续工具继续执行 | 42 项 persistence 单测与 3 项真实集成测试；覆盖幂等冲突、4 类篡改、锁超时、终态回滚、Secret 扫描及第二个治理写入零落盘 |
 | Git/test/repair loop | 文件写完不等于任务完成 | Git status/diff、测试发现、诊断解析、有限重试 | 修改后运行验证，将失败反馈给 Agent 修复 | 建立修改、验证、修复、再验证闭环 | 首次通过率、修复后通过率、平均修复轮次 |
 | 质量门禁 | 企业级项目需要稳定接口和回归保护 | Ruff、严格 Pyright、Pytest、85% 核心覆盖率门槛、哈希构建约束、CI、SemVer | 自动执行 lint、类型检查、测试、构建和安装验证 | 防止低质量变更进入发布版本 | Python 3.12/3.13 各 505 通过、3 项 symlink 权限跳过；90.09% 分支覆盖率；四组构建安装 smoke 通过；远程 CI 待验证 |
@@ -131,7 +131,7 @@ System Prompt、工具定义和完整消息先统一估算；ToolCall 与 ToolRe
 
 ### 7.6 Checkpoint 与 Resume
 
-“M3b 先把 Session、Run 和 Trace 的事实边界做牢：SQLite 一个事务同时追加 typed event 和更新 projection，Provider/Tool 前先写 Started，完成后再写 Completed；required Journal 失败会停止后续工作。这样崩溃后看到 started-only 写操作时，系统明确知道结果不确定，而不是误判为未执行。它仍不是 Checkpoint/Resume；M3c 还要保存消息与预算，并校验 Workspace/Schema 后决定是否可恢复，绝不自动重放不确定副作用。”
+“M3b 先把 Session、Run 和 Trace 的事实边界做牢，M3c 再只在合法 Provider 输入边界保存完整 typed transcript。Resume 会验证 hash chain、Tool contract 和 Workspace fingerprint，并扫描 Checkpoint 之后的全部事件；任何 write/execute/network 都阻断自动恢复。claim 还会重新分析调用方 plan，并在一个事务里中断旧 Run、启动新 Run、消费快照。Provider/只读重试是显式 at-least-once，不冒充外部 exactly-once。”
 
 ### 7.7 Git/test/repair 闭环
 
@@ -182,6 +182,12 @@ System Prompt、工具定义和完整消息先统一估算；ToolCall 与 ToolRe
 - 将持久化从 best-effort 可观测性中分离为 required `EventJournal`：Provider/Tool 前持久化
   Started，失败即返回 `PERSISTENCE_ERROR` 并停止后续动作；真实双 `write_file` 故障注入证明
   第二个文件零落盘，started-only 状态保留供 M3c 判断。
+- 实现 stable Checkpoint/Resume：在初始及完整 ToolResult 后原子保存 typed transcript，
+  通过 Tool/Workspace fingerprint 与 Checkpoint 后增量 Trace 扫描阻断不确定副作用；
+  claim 重新分析 plan，并在一个 SQLite 事务中中断旧 Run、启动新 Run、消费快照。
+- 通过 Provider 进程崩溃重开恢复、真实治理写入后零重放、Workspace/Tool 漂移、篡改、
+  stale plan、事务回滚和并发双 claim 测试；明确 Provider retry 为 at-least-once，
+  Checkpoint 为有界明文且不宣称外部 exactly-once。
 - 完成 Mini CodeAgent M0 工程基础：显式配置优先级、Pydantic 强类型边界、密钥安全 JSON 日志与 `doctor` 诊断 CLI。
 - 建立 Ruff、严格 Pyright、Pytest 覆盖率门槛和哈希约束构建，Python 3.12/3.13
   各 505 项通过、3 项因 Windows symlink 权限跳过，分支覆盖率 90.09%。

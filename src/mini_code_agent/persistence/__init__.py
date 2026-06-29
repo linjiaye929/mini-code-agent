@@ -1,3 +1,4 @@
+from mini_code_agent.persistence.checkpoints import SessionCheckpointJournal
 from mini_code_agent.persistence.errors import (
     PersistenceError,
     PersistenceErrorCode,
@@ -25,6 +26,7 @@ __all__ = [
     "PersistenceErrorCode",
     "RunRecord",
     "RunStatus",
+    "SessionCheckpointJournal",
     "SessionEventJournal",
     "SessionRecord",
     "SessionStatus",

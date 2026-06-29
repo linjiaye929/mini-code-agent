@@ -9,7 +9,7 @@
 | L4 Workspace and Policy | Complete locally | WorkspaceBoundary + deterministic Policy + approval governance |
 | L5 File/Edit/Command/Git tools | In progress | Read/Search/Write/Edit/argv Command complete; Git deferred |
 | L6 Context Budget | Complete locally | Deterministic estimator, atomic selection, side-effect pinning, runtime integration |
-| L7 Session/Checkpoint/Trace | In progress | M3b versioned Session/Run and append-only Trace complete; M3c Checkpoint/Resume pending |
+| L7 Session/Checkpoint/Trace | Complete locally | M3b Trace plus M3c stable Checkpoint/fail-closed Resume |
 | L8 Git/test/repair | Not started | |
 | L9 Skills and Hooks | Not started | |
 | L10 MCP | Not started | |
@@ -396,3 +396,28 @@
   `mini_code_agent-0.8.0a0.tar.gz`.
 - The exact wheel and sdist passed four isolated console-script smoke tests on Python 3.12 and
   3.13.
+
+## M3c Checkpoint and Resume Notes
+
+- SQLite schema v2 adds Checkpoints through a transactional v1 migration while Trace envelope
+  version and historical hashes remain unchanged.
+- Runtime saves only stable model-input state: initially and after complete ToolResult batches.
+- Canonical payload hashes detect accidental snapshot corruption; Tool and bounded Workspace
+  fingerprints reject incompatible recovery environments.
+- Resume verifies the complete Trace and scans every post-Checkpoint event in pages. Write,
+  execute, and network actions block automatic Resume even when ToolCompleted exists.
+- Provider and read-only retries require independent explicit policy.
+- Claim reanalyzes caller input, compares the Trace head under `BEGIN IMMEDIATE`, interrupts the
+  source Run, starts a new Run, and consumes the Checkpoint atomically.
+- Checkpoints contain full conversation/tool state as bounded plaintext. Encryption, signed audit,
+  distributed leases, external reconciliation, and exactly-once execution remain non-claims.
+
+## M3c Current Verification
+
+- Agent/Checkpoint/Persistence and selected integration suite: 156 passed; 1 Windows symlink
+  privilege skip.
+- Resume analysis/claim plus process-boundary integration: 16 passed.
+- Concurrent claim test produced exactly one winner in five consecutive runs.
+- Ruff and strict Pyright: passed.
+- Dual-Python full-suite, coverage, security, build, and artifact smoke evidence will be recorded
+  only after the `v0.9.0-alpha.0` release gates complete.

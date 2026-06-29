@@ -444,6 +444,40 @@
 - 对比 Session、Run、Trace 与 Checkpoint：指出哪些数据能查询、哪些数据可恢复。
 - 解释为什么 started-only 写操作在 Resume 时不能自动重放。
 
+#### M3c Checkpoint/Resume 实现笔记
+
+- `CheckpointSaved` 与完整状态行在同一个 `BEGIN IMMEDIATE` 事务提交；这是“日志事实 +
+  状态快照”的原子边界，不是把两个文件按顺序写完。
+- 数据库 schema 从 v1 迁移到 v2，但 Trace envelope 保持 v1，因此历史 hash chain 不需要
+  重写；类似 Flink 状态后端升级时区分元数据格式与业务序列化格式。
+- 稳定点只出现在合法 Provider 输入边界：初始用户消息，或完整
+  `Assistant ToolCall -> User ToolResult` 之后。中间态不能当作 Checkpoint。
+- Resume 不只读取快照，还扫描快照 sequence 之后的 WAL 式事实。任何未纳入快照的
+  write/execute/network Tool 都是不可自动重放的外部状态。
+- Tool contract SHA-256 类似 JobGraph/serializer compatibility；Workspace SHA-256 类似
+  输入状态版本。二者变化都要求停止，而不是猜测兼容。
+- `ResumePlan` 是可序列化数据，不是权限凭证；claim 必须重新分析，防止调用方伪造 plan
+  绕过副作用策略。
+- claim 在一个事务内中断 source Run、启动 resumed Run、消费 Checkpoint；并发进程只有
+  一个成功，类似数据库乐观锁加唯一状态迁移。
+- Provider retry 是显式 at-least-once。没有目标系统 idempotency key 或事务时，Agent
+  无法承诺外部副作用 exactly-once。
+- Checkpoint 为恢复必须保存完整消息，因此会持久化 prompt、模型文本、工具参数/结果和
+  命令输出；当前是有界明文，不等于 Secret scrubbing 或加密。
+
+#### M3c 代码阅读练习
+
+1. 从 Runtime 的初始 `_save_checkpoint` 跟到 SQLite 行和 `CheckpointSaved`，标出事务
+   内外边界。
+2. 在 Provider 返回 ToolCall 后、Tool 执行前、ToolCompleted 后分别模拟崩溃，判断最新
+   Checkpoint 和增量 Trace 会让 Resume 得到什么结论。
+3. 修改一个 Tool 的 `input_schema` 或 `side_effect`，解释为什么 fingerprint 必须变化。
+4. 让两个线程 claim 同一个 plan，说明 `BEGIN IMMEDIATE`、Trace head 和 available 状态
+   如何共同产生一个 winner。
+5. 构造一个 Pydantic `ResumePlan` 试图绕过分析，定位 claim 重新分析的防线。
+6. 对比 Flink Checkpoint：哪些是可类比的状态/版本/恢复概念，哪些分布式 barrier 和
+   exactly-once 能力本项目没有。
+
 **Java/Flink/Kafka 迁移类比**
 
 | 现有经验 | M3b 对应概念 |

@@ -70,8 +70,12 @@
   distributed consistency, or protection from storage failure.
 - The Trace hash chain is not signed or authenticated; a writer with database access can rewrite
   payloads and hashes.
-- M3b does not persist messages or Checkpoints. An active Run or started-only Tool after a crash
-  is indeterminate and must not be automatically replayed before M3c compatibility/recovery
-  checks.
+- M3c Checkpoints persist full prompts, responses, Tool arguments/results, patches, and command
+  output as bounded plaintext. Event Secret scrubbing does not protect Checkpoint payloads.
+- Resume rejects Tool-contract or Workspace drift and scans all post-Checkpoint Trace events.
+  Any uncheckpointed write, execute, or network Tool blocks automatic replay.
+- Provider/read-only replay requires explicit policy and can still duplicate Provider cost or
+  observations. No exactly-once or external-system reconciliation is claimed.
+- SQLite serializes local Checkpoint claims; it is not a multi-host lease service.
 - Configured-value scrubbing cannot detect unknown secrets, and SQLite is not encrypted at rest.
 - MCP connection does not establish trust.

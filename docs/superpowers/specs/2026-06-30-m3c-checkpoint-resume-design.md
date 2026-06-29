@@ -125,8 +125,9 @@ and may repeat it only under the selected policy.
 
 ## Atomic Claim and New Run
 
-`claim_resume(plan, resumed_run_id)` repeats all eligibility checks under `BEGIN IMMEDIATE` to
-close time-of-check/time-of-use races. It then:
+`claim_resume(plan, resumed_run_id)` reruns trusted eligibility analysis instead of trusting the
+serializable plan. Under `BEGIN IMMEDIATE` it requires the analyzed event count and Trace head to
+remain unchanged, closing the analysis-to-claim race. It then:
 
 - appends `RunStopped(reason=interrupted)` for the source Run using cumulative snapshot metrics;
 - appends `RunStarted` for the new Run;
@@ -192,4 +193,3 @@ Integration tests inject process-boundary failures:
   compatibility checks.
 - At-least-once Provider retry is explicit; external Tool exactly-once remains impossible without
   idempotency keys or target-system transactions.
-

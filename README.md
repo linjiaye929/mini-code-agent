@@ -2,11 +2,11 @@
 
 A framework-light, provider-neutral coding agent built from first principles.
 
-> Status: pre-alpha. M3b provides a provider-neutral Agent Core, Anthropic/OpenAI-compatible
+> Status: pre-alpha. M3c provides a provider-neutral Agent Core, Anthropic/OpenAI-compatible
 > adapters, a schema-validating Tool Registry, a cross-platform Workspace boundary, bounded
 > Read/Search, conflict-aware Write/Edit, policy-governed argv command execution, and deterministic
-> context admission plus versioned SQLite Session/Trace persistence. Shell-string execution,
-> Checkpoint/Resume, and live-provider CI are not implemented.
+> context admission, versioned SQLite Session/Trace persistence, and fail-closed
+> Checkpoint/Resume. Shell-string execution and live-provider CI are not implemented.
 
 ## Requirements
 
@@ -135,14 +135,28 @@ with SqliteSessionTraceStore(Path("agent-state.db")) as store:
     verification = store.verify_trace(session.session_id)
 ```
 
-SQLite schema v1 stores bounded lifecycle events and Session/Run projections in one transaction.
+SQLite database schema v2 stores bounded Trace-envelope-v1 lifecycle events, Checkpoints, and
+Session/Run projections in transactional boundaries.
 The required journal records `ModelStarted` before Provider I/O and `ToolStarted` before Tool
 execution; a persistence failure stops later work. Event IDs are idempotency keys, and a
 per-Session SHA-256 chain detects inconsistent rows and projections.
 
-Prompts, Tool arguments/results, patches, and command output are not stored. The hash chain is not
-signed or tamper-proof, and active/started-only state cannot be resumed until M3c. See
+Trace events exclude prompts, Tool arguments/results, patches, and command output. The hash chain
+is not signed or tamper-proof. See
 `docs/architecture/session-trace.md`.
+
+## Checkpoint and Resume
+
+M3c saves full typed state only before Provider calls: initially and after complete ToolResult
+batches. SQLite schema v2 atomically binds each snapshot to `CheckpointSaved`. Resume verifies the
+Trace, Tool contract, and bounded Workspace fingerprint, then explicitly gates possible
+Provider/read-only replay. Any uncheckpointed write, execute, or network action blocks automatic
+Resume.
+
+Checkpoint payloads contain full prompts, model text, Tool arguments/results, and command output
+as bounded plaintext. This is local crash recovery, not encryption, distributed coordination, or
+exactly-once external execution. Keep the database outside the model-controlled Workspace. See
+`docs/architecture/checkpoint-resume.md`.
 
 ## Documentation
 
@@ -157,6 +171,7 @@ signed or tamper-proof, and active/started-only state cannot be resumed until M3
 - Governed commands: `docs/architecture/governed-command-execution.md`
 - Context budget: `docs/architecture/context-budget.md`
 - Session and Trace: `docs/architecture/session-trace.md`
+- Checkpoint and Resume: `docs/architecture/checkpoint-resume.md`
 - Threat model: `docs/architecture/threat-model.md`
 - Provider protocol ADR: `docs/adr/0002-provider-wire-protocols.md`
 - Workspace boundary ADR: `docs/adr/0003-workspace-boundary.md`
@@ -164,6 +179,7 @@ signed or tamper-proof, and active/started-only state cannot be resumed until M3
 - Argv command runner ADR: `docs/adr/0005-argv-command-runner.md`
 - Context budget ADR: `docs/adr/0006-deterministic-context-budget.md`
 - SQLite Session/Trace ADR: `docs/adr/0007-sqlite-session-trace.md`
+- Safe Checkpoint/Resume ADR: `docs/adr/0008-safe-checkpoint-resume.md`
 
 ## License
 
