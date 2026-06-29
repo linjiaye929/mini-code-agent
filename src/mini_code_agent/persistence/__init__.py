@@ -16,6 +16,7 @@ from mini_code_agent.persistence.schema import (
     connect_database,
     initialize_database,
 )
+from mini_code_agent.persistence.store import SqliteSessionTraceStore
 
 __all__ = [
     "EMPTY_TRACE_SHA256",
@@ -26,6 +27,7 @@ __all__ = [
     "SessionRecord",
     "SessionStatus",
     "SessionTraceLimits",
+    "SqliteSessionTraceStore",
     "TraceRecord",
     "TraceVerification",
     "connect_database",

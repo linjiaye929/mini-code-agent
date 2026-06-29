@@ -8,6 +8,8 @@ class PersistenceErrorCode(StrEnum):
     UNSUPPORTED_SCHEMA = "unsupported_schema"
     SESSION_EXISTS = "session_exists"
     SESSION_NOT_FOUND = "session_not_found"
+    RUN_NOT_FOUND = "run_not_found"
+    INVALID_IDENTIFIER = "invalid_identifier"
     RUN_CONFLICT = "run_conflict"
     INVALID_TRANSITION = "invalid_transition"
     EVENT_CONFLICT = "event_conflict"
