@@ -19,6 +19,7 @@ All notable changes follow Keep a Changelog. Versions follow Semantic Versioning
 - Runtime stops with `PERSISTENCE_ERROR` when a configured journal cannot append.
 - `ToolStarted` is persisted before execution and `ToolCompleted` after execution.
 - Cancellation attempts one terminal journal event but still re-raises `CancelledError`.
+- SQLite test connections now commit or roll back before deterministic closure.
 
 ### Security
 

@@ -527,7 +527,7 @@ git commit -m "test: verify persistent agent trace"
 
 ## Task 8: Documentation and `v0.8.0-alpha.0`
 
-**Status:** In progress
+**Status:** Release gates complete; merge pending
 
 **Files:**
 
@@ -542,22 +542,22 @@ git commit -m "test: verify persistent agent trace"
 - Modify: `pyproject.toml`
 - Modify: version contract tests and `uv.lock`
 
-- [ ] Document SQLite-only rationale, schema/transaction boundaries, Session/Run projections,
+- [x] Document SQLite-only rationale, schema/transaction boundaries, Session/Run projections,
   event ordering, hash-chain semantics, busy-timeout behavior, configured Secret scrubbing, and
   all non-claims.
 
-- [ ] Add learning material for SQLite transactions/WAL, event sourcing/materialized views,
+- [x] Add learning material for SQLite transactions/WAL, event sourcing/materialized views,
   idempotency keys, Kafka/Flink analogies, indeterminate side effects, and exact code-reading
   exercises.
 
-- [ ] Update the resume row with why, technology, function, solved problem, limitations, and only
+- [x] Update the resume row with why, technology, function, solved problem, limitations, and only
   measured tests/coverage. Do not claim Checkpoint/Resume, encryption, tamper-proof audit, or
   exactly-once.
 
-- [ ] Add version-first failing tests for `0.8.0a0`, update package metadata/lock, README, and
+- [x] Add version-first failing tests for `0.8.0a0`, update package metadata/lock, README, and
   Changelog.
 
-- [ ] Run release gates independently so PowerShell cannot mask an earlier exit code:
+- [x] Run release gates independently so PowerShell cannot mask an earlier exit code:
 
 ```powershell
 python -m uv lock --check
@@ -571,7 +571,7 @@ python -m uv run --isolated --python 3.13 --with pip-audit pip-audit
 python -m uv build --build-constraint build-constraints.txt --require-hashes
 ```
 
-- [ ] Smoke-test the exact `0.8.0a0` wheel and sdist on Python 3.12/3.13 with `--no-project`.
+- [x] Smoke-test the exact `0.8.0a0` wheel and sdist on Python 3.12/3.13 with `--no-project`.
 
 - [ ] Fast-forward merge to main, verify the merged full suite and CLI version in an isolated
   environment, tag `v0.8.0-alpha.0`, then remove only the owned clean worktree and branch.

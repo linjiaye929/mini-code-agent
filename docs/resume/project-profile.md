@@ -82,7 +82,7 @@ Pytest、pytest-asyncio、Coverage、Ruff 与 Pyright；其余技术随对应里
 | Checkpoint/Resume | 网络错误、进程退出和人工中断不应导致全部重跑 | SQLite、版本化 Schema、原子快照、幂等恢复 | 保存会话状态并从中断点继续 | 提高长任务容错和问题复现能力 | 故障注入场景、恢复成功率和耗时待回填 |
 | 版本化 Session 与追加式 Trace | 进程退出后纯内存事件不可查询；若 Trace 与状态分开写会出现索引/正文不一致，静默持久化失败还会继续产生副作用 | SQLite schema v1、WAL、`BEGIN IMMEDIATE`、foreign key、Session/Run materialized projection、UUID event ID、canonical JSON、SHA-256 前驱链、required `EventJournal`、bounded busy timeout | 单事务追加 typed lifecycle event 并更新 Run/Session；Provider/Tool 前记录 Started，完成后记录 Completed；支持重开查询、分页读取和全链验证 | 消除 Trace/投影跨文件提交缝隙，将持久化故障转化为 `PERSISTENCE_ERROR`，用 started-only 状态标记不确定副作用，阻止后续工具继续执行 | 42 项 persistence 单测与 3 项真实集成测试；覆盖幂等冲突、4 类篡改、锁超时、终态回滚、Secret 扫描及第二个治理写入零落盘 |
 | Git/test/repair loop | 文件写完不等于任务完成 | Git status/diff、测试发现、诊断解析、有限重试 | 修改后运行验证，将失败反馈给 Agent 修复 | 建立修改、验证、修复、再验证闭环 | 首次通过率、修复后通过率、平均修复轮次 |
-| 质量门禁 | 企业级项目需要稳定接口和回归保护 | Ruff、严格 Pyright、Pytest、85% 核心覆盖率门槛、哈希构建约束、CI、SemVer | 自动执行 lint、类型检查、测试、构建和安装验证 | 防止低质量变更进入发布版本 | Python 3.12/3.13 各 440 通过、3 项 symlink 权限跳过；90.12% 分支覆盖率；四组构建安装 smoke 通过；远程 CI 待验证 |
+| 质量门禁 | 企业级项目需要稳定接口和回归保护 | Ruff、严格 Pyright、Pytest、85% 核心覆盖率门槛、哈希构建约束、CI、SemVer | 自动执行 lint、类型检查、测试、构建和安装验证 | 防止低质量变更进入发布版本 | Python 3.12/3.13 各 505 通过、3 项 symlink 权限跳过；90.09% 分支覆盖率；四组构建安装 smoke 通过；远程 CI 待验证 |
 | 可扩展 Harness | Skills、Hooks、MCP、Subagent 会增加控制流复杂度 | 稳定 Protocol、EventBus、能力声明、依赖倒置 | 在不侵入 Agent Core 的前提下增加能力 | 避免扩展绕过权限、Trace 和 Session | 插件合约测试；扩展数量后续回填 |
 
 ## 6. 指标回填规则
@@ -184,7 +184,7 @@ System Prompt、工具定义和完整消息先统一估算；ToolCall 与 ToolRe
   第二个文件零落盘，started-only 状态保留供 M3c 判断。
 - 完成 Mini CodeAgent M0 工程基础：显式配置优先级、Pydantic 强类型边界、密钥安全 JSON 日志与 `doctor` 诊断 CLI。
 - 建立 Ruff、严格 Pyright、Pytest 覆盖率门槛和哈希约束构建，Python 3.12/3.13
-  各 440 项通过、3 项因 Windows symlink 权限跳过，分支覆盖率 90.12%。
+  各 505 项通过、3 项因 Windows symlink 权限跳过，分支覆盖率 90.09%。
 - wheel 与 sdist 在 Python 3.12/3.13 的四组隔离环境中通过真实 console-script smoke；
   Bandit 无发现，pip-audit 未发现已知依赖漏洞。
 - 对 wheel 与 sdist 分别执行隔离安装和真实 console-script smoke，并通过 `py.typed` 发布内联类型信息。

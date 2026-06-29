@@ -380,11 +380,19 @@
 7. Compare an active Run, a started-only Tool, and a Checkpoint; define what M3c must decide for
    each.
 
-## M3b Current Verification
+## M3b Local Verification
 
 - Persistence unit suite: 42 passed.
 - Runtime/Context/Persistence/Integration focused suite: 152 passed.
-- Current full local development suite: 505 passed; 3 Windows symlink privilege skips.
+- Full Python 3.12.13 and 3.13.14 development suite: 505 passed per interpreter; 3 Windows
+  symlink privilege skips per interpreter.
+- Python 3.13 branch-aware package coverage: 90.09%, above the configured 85% gate.
 - Ruff format/check and strict Pyright: passed.
-- Full dual-Python coverage, security scans, hashed build, and four artifact smoke tests are
-  recorded only after the `v0.8.0-alpha.0` release gate completes.
+- Persistence and integration tests also pass with unclosed SQLite connections promoted to
+  `ResourceWarning` errors.
+- Bandit: no unsuppressed findings. pip-audit found no known dependency vulnerabilities; the
+  unpublished local package itself was skipped because it is not on PyPI.
+- Hashed build produced `mini_code_agent-0.8.0a0-py3-none-any.whl` and
+  `mini_code_agent-0.8.0a0.tar.gz`.
+- The exact wheel and sdist passed four isolated console-script smoke tests on Python 3.12 and
+  3.13.
