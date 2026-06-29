@@ -39,6 +39,7 @@ dev = [
     "hatchling==1.30.1",
     "pyright>=1.1.390",
     "pytest>=8.3,<10",
+    "pytest-asyncio>=0.25,<2",
     "pytest-cov>=6,<8",
     "ruff>=0.9",
 ]
@@ -48,6 +49,7 @@ packages = ["src/mini_code_agent"]
 
 [tool.pytest.ini_options]
 addopts = ["-ra", "--strict-config", "--strict-markers"]
+asyncio_mode = "strict"
 testpaths = ["tests"]
 
 [tool.coverage.run]
