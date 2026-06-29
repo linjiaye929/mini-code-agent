@@ -272,9 +272,18 @@
 
 ## M2c Local Verification
 
-- Command/Policy/Tool focused suite: 66 passed before final hardening.
-- Full Python 3.13.14 development suite: 394 passed; 3 Windows symlink privilege skips.
-- Branch-aware package coverage: 89.87%, above the configured 85% gate.
+- Command/Policy/Tool focused suite: 70 passed after final cleanup hardening.
+- Full Python 3.12.13 and 3.13.14 development suite: 395 passed per interpreter; 3 Windows
+  symlink privilege skips per interpreter.
+- Branch-aware package coverage: 89.73%, above the configured 85% gate.
 - Ruff format/check and strict Pyright: passed.
-- Python 3.12, security scan, artifacts, and installed smoke tests remain release-gate evidence
-  and are not claimed until completed.
+- Bandit: no unsuppressed findings; the deliberate `subprocess` constants import has a scoped
+  B404 suppression while execution remains argv-only. pip-audit found no known vulnerabilities;
+  the unpublished local package itself was skipped because it is not on PyPI.
+- Hashed build produced `mini_code_agent-0.6.0a0-py3-none-any.whl` and
+  `mini_code_agent-0.6.0a0.tar.gz`.
+- Wheel and sdist each passed isolated installed console-script smoke tests on Python 3.12 and
+  3.13.
+- Package version: `0.6.0a0`; local milestone tag target: `v0.6.0-alpha.0`.
+- Linux process behavior and remote GitHub Actions still require remote evidence; no remote
+  result is claimed.

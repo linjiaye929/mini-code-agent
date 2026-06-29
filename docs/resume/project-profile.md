@@ -75,12 +75,12 @@ JSON Schema Draft 2020-12、Pytest、pytest-asyncio、Coverage、Ruff 与 Pyrigh
 | 权限决策系统 | 模型请求动作不等于系统应执行，写入、命令和网络风险也不同 | 不可变首匹配 Policy Rule、风险/资源/会话/信任源匹配、`GovernedToolExecutor`、交互审批、非交互 fail-closed | 在执行前依次完成 Schema、预览、allow/ask/deny 和审批；Agent Runtime 拒绝未治理副作用工具 | 防止 Prompt 自授权、未审批落盘和错误配置的非交互自动批准 | 26 项执行器/Registry 测试；拒绝、显式批准、非交互零写入均有回归测试 |
 | 防冲突 Write/Edit | Agent 基于旧上下文写文件会覆盖用户或其他进程的新修改 | `read_file` 原始字节 SHA-256、乐观并发前置条件、create-only、唯一 literal match、审批后重复校验 | 创建新文件、哈希匹配替换、精确单点编辑并返回前后哈希和 diff | 将静默覆盖转化为可重试 `conflict`，拒绝零匹配、多匹配和 no-op 编辑 | 32 项相关单测与 3 项真实 Agent 治理写入集成测试通过 |
 | 原子文件发布 | 写盘中断可能留下半个源文件，审批界面也不能展示无界内容 | 同目录 `NamedTemporaryFile`、flush/`fsync`、权限位保留、`os.link`/`os.replace`、失败清理、32 KiB diff 上限 | 成功时一次发布完整内容，失败时保留原文件并清理临时文件 | 避免部分写入和临时文件泄漏，控制审批与 ToolResult 体积 | 故障注入、陈旧哈希、大小/NUL/编码、diff 截断和原文件不变测试 |
-| 受治理 argv 命令执行 | 测试/构建需要启动进程，但 shell 字符串带来插值注入、平台转义和失控子进程风险 | `create_subprocess_exec`、critical preview、execute 默认 deny、`executable_glob`、Workspace cwd、最小环境、POSIX process group、Windows `taskkill /T /F` | 经显式规则和交互审批运行 argv 命令，返回 exit/stdout/stderr/timeout/overflow，并在取消前清理进程树 | 去除 `shell=True` 解析面，避免 API Key 环境继承、无界输出、超时后父子进程残留和 pipe 死锁 | 28 项 Command 单测、7 项 Tool 单测、4 项 Agent 治理集成测试；父子心跳、异常读取和非交互零执行均覆盖 |
+| 受治理 argv 命令执行 | 测试/构建需要启动进程，但 shell 字符串带来插值注入、平台转义和失控子进程风险 | `create_subprocess_exec`、critical preview、execute 默认 deny、`executable_glob`、Workspace cwd、最小环境、POSIX process group、Windows `taskkill /T /F` | 经显式规则和交互审批运行 argv 命令，返回 exit/stdout/stderr/timeout/overflow，并在取消前清理进程树 | 去除 `shell=True` 解析面，避免 API Key 环境继承、无界输出、超时后父子进程残留和 pipe 死锁 | 29 项 Command 单测、7 项 Tool 单测、4 项 Agent 治理集成测试；父子心跳、异常读取和非交互零执行均覆盖 |
 | Context Budget | 长任务会超过上下文窗口，直接截断会丢关键事实 | token estimator、消息优先级、滚动摘要、工具输出落盘 | 预算预估、压缩、保留任务目标和未完成项 | 降低上下文超限和无效 token 消耗 | 压缩前后 token、关键信息 golden test |
 | Checkpoint/Resume | 网络错误、进程退出和人工中断不应导致全部重跑 | SQLite、版本化 Schema、原子快照、幂等恢复 | 保存会话状态并从中断点继续 | 提高长任务容错和问题复现能力 | 故障注入场景、恢复成功率和耗时待回填 |
 | 结构化 Trace | 文本日志无法回答 Agent 为什么执行某动作 | 类型化事件、correlation ID、耗时、usage、JSONL、脱敏 | 记录模型、工具、权限、压缩、恢复和错误事件 | 支持调试、审计、成本分析和行为评估 | Trace Schema 覆盖、解析测试、脱敏测试 |
 | Git/test/repair loop | 文件写完不等于任务完成 | Git status/diff、测试发现、诊断解析、有限重试 | 修改后运行验证，将失败反馈给 Agent 修复 | 建立修改、验证、修复、再验证闭环 | 首次通过率、修复后通过率、平均修复轮次 |
-| 质量门禁 | 企业级项目需要稳定接口和回归保护 | Ruff、严格 Pyright、Pytest、85% 核心覆盖率门槛、哈希构建约束、CI、SemVer | 自动执行 lint、类型检查、测试、构建和安装验证 | 防止低质量变更进入发布版本 | Python 3.12/3.13 各 348 通过、2 项 symlink 权限跳过；90.35% 分支覆盖率；四组构建安装 smoke 通过；远程 CI 待验证 |
+| 质量门禁 | 企业级项目需要稳定接口和回归保护 | Ruff、严格 Pyright、Pytest、85% 核心覆盖率门槛、哈希构建约束、CI、SemVer | 自动执行 lint、类型检查、测试、构建和安装验证 | 防止低质量变更进入发布版本 | Python 3.12/3.13 各 395 通过、3 项 symlink 权限跳过；89.73% 分支覆盖率；四组构建安装 smoke 通过；远程 CI 待验证 |
 | 可扩展 Harness | Skills、Hooks、MCP、Subagent 会增加控制流复杂度 | 稳定 Protocol、EventBus、能力声明、依赖倒置 | 在不侵入 Agent Core 的前提下增加能力 | 避免扩展绕过权限、Trace 和 Session | 插件合约测试；扩展数量后续回填 |
 
 ## 6. 指标回填规则
@@ -167,7 +167,7 @@ JSON Schema Draft 2020-12、Pytest、pytest-asyncio、Coverage、Ruff 与 Pyrigh
   取消和跨平台进程树清理支撑测试构建；默认 deny，显式规则和交互审批后才启动进程。
 - 完成 Mini CodeAgent M0 工程基础：显式配置优先级、Pydantic 强类型边界、密钥安全 JSON 日志与 `doctor` 诊断 CLI。
 - 建立 Ruff、严格 Pyright、Pytest 覆盖率门槛和哈希约束构建，Python 3.12/3.13
-  各 348 项通过、2 项因 Windows symlink 权限跳过，分支覆盖率 90.35%。
+  各 395 项通过、3 项因 Windows symlink 权限跳过，分支覆盖率 89.73%。
 - wheel 与 sdist 在 Python 3.12/3.13 的四组隔离环境中通过真实 console-script smoke；
   Bandit 无发现，pip-audit 未发现已知依赖漏洞。
 - 对 wheel 与 sdist 分别执行隔离安装和真实 console-script smoke，并通过 `py.typed` 发布内联类型信息。

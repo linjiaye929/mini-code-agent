@@ -3,7 +3,7 @@ from __future__ import annotations
 import asyncio
 import os
 import signal
-import subprocess
+import subprocess  # nosec B404
 import time
 from collections.abc import Mapping
 from dataclasses import dataclass, field
@@ -12,6 +12,7 @@ from mini_code_agent.command.environment import build_minimal_environment
 from mini_code_agent.command.errors import CommandError, CommandErrorCode
 from mini_code_agent.command.models import CommandLimits, CommandRequest, CommandResult
 
+# `subprocess` supplies process flags only; execution remains argv-only.
 _READ_CHUNK_BYTES = 64 * 1024
 _OUTPUT_EXIT_GRACE_SECONDS = 0.1
 

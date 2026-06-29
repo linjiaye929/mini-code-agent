@@ -4,6 +4,8 @@ All notable changes follow Keep a Changelog. Versions follow Semantic Versioning
 
 ## [Unreleased]
 
+## [0.6.0-alpha.0] - 2026-06-29
+
 ### Added
 
 - Critical-risk `run_command` tool with exact argv/cwd/reason approval previews.
