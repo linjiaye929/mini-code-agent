@@ -527,7 +527,7 @@ git commit -m "test: verify persistent agent trace"
 
 ## Task 8: Documentation and `v0.8.0-alpha.0`
 
-**Status:** Release gates complete; merge pending
+**Status:** Complete
 
 **Files:**
 
@@ -573,5 +573,5 @@ python -m uv build --build-constraint build-constraints.txt --require-hashes
 
 - [x] Smoke-test the exact `0.8.0a0` wheel and sdist on Python 3.12/3.13 with `--no-project`.
 
-- [ ] Fast-forward merge to main, verify the merged full suite and CLI version in an isolated
+- [x] Fast-forward merge to main, verify the merged full suite and CLI version in an isolated
   environment, tag `v0.8.0-alpha.0`, then remove only the owned clean worktree and branch.
