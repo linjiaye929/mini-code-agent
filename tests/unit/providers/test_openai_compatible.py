@@ -202,6 +202,43 @@ async def test_complete_omits_empty_system_and_tools() -> None:
 
 
 @pytest.mark.asyncio
+async def test_complete_preserves_tool_error_semantics_in_tool_content() -> None:
+    captured_body: dict[str, Any] = {}
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        captured_body.update(cast(dict[str, Any], json.loads(request.content)))
+        return httpx.Response(200, json=openai_response(), request=request)
+
+    provider, client = provider_with_handler(handler)
+    request = ModelRequest(
+        request_id="request-1",
+        system_prompt="",
+        messages=(
+            Message(
+                role=MessageRole.USER,
+                content=(
+                    ToolResult(
+                        tool_call_id="call-1",
+                        content="execution failed",
+                        is_error=True,
+                    ),
+                ),
+            ),
+        ),
+    )
+
+    await provider.complete(request)
+
+    tool_message = captured_body["messages"][0]
+    assert tool_message == {
+        "role": "tool",
+        "tool_call_id": "call-1",
+        "content": '{"content":"execution failed","is_error":true}',
+    }
+    await client.aclose()
+
+
+@pytest.mark.asyncio
 async def test_complete_normalizes_text_and_parallel_tool_calls() -> None:
     wire_calls = [
         {
@@ -444,6 +481,8 @@ async def test_complete_rejects_malformed_or_lossy_response(
         {"extra_headers": {"Authorization": "other"}},
         {"extra_headers": {"Content-Type": "text/plain"}},
         {"extra_headers": {"X-Test": "bad\nvalue"}},
+        {"extra_headers": {1: "value"}},
+        {"extra_headers": {"X-Test": 1}},
     ],
 )
 def test_provider_rejects_invalid_configuration(kwargs: dict[str, object]) -> None:

@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import re
 from collections.abc import AsyncGenerator, AsyncIterator, Mapping
 from contextlib import AbstractAsyncContextManager, asynccontextmanager
 from dataclasses import dataclass
@@ -16,6 +17,7 @@ _MAX_BASE_URL_LENGTH: Final = 2_048
 _MAX_TIMEOUT_SECONDS: Final = 600.0
 _MAX_RESPONSE_BYTES: Final = 16 * 1024 * 1024
 _MAX_REQUEST_ID_LENGTH: Final = 128
+_ENDPOINT_PATTERN: Final = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._/-]{0,511}$")
 _JSON_OBJECT_ADAPTER = TypeAdapter(dict[str, JsonValue])
 
 type JsonObject = dict[str, JsonValue]
@@ -43,9 +45,10 @@ class ProviderHttpTransport:
             raise ValueError("max_response_bytes must be between 1 and 16777216")
 
         self._max_response_bytes = max_response_bytes
+        self._timeout = httpx.Timeout(timeout_seconds)
         self._owns_client = client is None
         self._client = client or httpx.AsyncClient(
-            timeout=httpx.Timeout(timeout_seconds),
+            timeout=self._timeout,
             follow_redirects=False,
         )
 
@@ -67,6 +70,8 @@ class ProviderHttpTransport:
                 url,
                 headers=headers,
                 json=payload,
+                timeout=self._timeout,
+                follow_redirects=False,
             ) as response:
                 _raise_for_status(response.status_code)
                 request_id = _extract_request_id(response.headers)
@@ -105,6 +110,8 @@ class ProviderHttpTransport:
                 url,
                 headers=headers,
                 json=payload,
+                timeout=self._timeout,
+                follow_redirects=False,
             ) as event_source:
                 response = event_source.response
                 _raise_for_status(response.status_code)
@@ -166,6 +173,7 @@ class ProviderHttpTransport:
         normalized_path = path.strip("/")
         if (
             not normalized_path
+            or _ENDPOINT_PATTERN.fullmatch(normalized_path) is None
             or ".." in normalized_path.split("/")
             or "?" in normalized_path
             or "#" in normalized_path

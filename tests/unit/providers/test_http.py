@@ -187,6 +187,63 @@ async def test_post_json_normalizes_network_failure_without_raw_exception() -> N
 
 
 @pytest.mark.asyncio
+async def test_borrowed_client_cannot_override_transport_timeout() -> None:
+    async def handler(request: httpx.Request) -> httpx.Response:
+        timeout = request.extensions["timeout"]
+        assert timeout["connect"] == 2
+        assert timeout["read"] == 2
+        assert timeout["write"] == 2
+        assert timeout["pool"] == 2
+        return httpx.Response(200, json={"ok": True}, request=request)
+
+    client = httpx.AsyncClient(
+        transport=httpx.MockTransport(handler),
+        timeout=None,
+    )
+    transport = ProviderHttpTransport(
+        base_url="https://provider.test",
+        timeout_seconds=2,
+        client=client,
+    )
+
+    payload, _ = await transport.post_json("v1/messages", headers={}, payload={})
+
+    assert payload == {"ok": True}
+    await client.aclose()
+
+
+@pytest.mark.asyncio
+async def test_borrowed_client_cannot_enable_provider_redirects() -> None:
+    request_count = 0
+
+    async def handler(request: httpx.Request) -> httpx.Response:
+        nonlocal request_count
+        request_count += 1
+        return httpx.Response(
+            307,
+            headers={"location": "https://redirected.test/collect"},
+            request=request,
+        )
+
+    client = httpx.AsyncClient(
+        transport=httpx.MockTransport(handler),
+        follow_redirects=True,
+    )
+    transport = ProviderHttpTransport(
+        base_url="https://provider.test",
+        timeout_seconds=2,
+        client=client,
+    )
+
+    with pytest.raises(ProviderError) as captured:
+        await transport.post_json("v1/messages", headers={}, payload={})
+
+    assert captured.value.code is ProviderErrorCode.INVALID_RESPONSE
+    assert request_count == 1
+    await client.aclose()
+
+
+@pytest.mark.asyncio
 async def test_stream_sse_yields_events_and_request_id() -> None:
     async def handler(request: httpx.Request) -> httpx.Response:
         return httpx.Response(
@@ -388,7 +445,16 @@ def test_transport_rejects_unsafe_or_unbounded_configuration(
 
 @pytest.mark.parametrize(
     "path",
-    ["", "../messages", "v1/../messages", "https://other.test/messages", "v1/messages?key=x"],
+    [
+        "",
+        "../messages",
+        "v1/../messages",
+        "https://other.test/messages",
+        "v1/messages?key=x",
+        "v1\\messages",
+        "v1/%2e%2e/messages",
+        "v1/messages with spaces",
+    ],
 )
 @pytest.mark.asyncio
 async def test_transport_rejects_invalid_endpoint_path(path: str) -> None:

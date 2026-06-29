@@ -4,7 +4,7 @@ import json
 import re
 from collections.abc import AsyncIterator, Mapping
 from dataclasses import dataclass, field
-from typing import Final, Literal
+from typing import Final, Literal, cast
 
 import httpx
 from pydantic import (
@@ -222,7 +222,7 @@ class OpenAICompatibleProvider:
                 {
                     "role": "tool",
                     "tool_call_id": block.tool_call_id,
-                    "content": block.content,
+                    "content": _tool_result_content(block),
                 }
                 for block in message.content
                 if isinstance(block, ToolResult)
@@ -471,7 +471,10 @@ def _validate_extra_headers(headers: Mapping[str, str]) -> dict[str, str]:
         raise ValueError("extra_headers cannot contain more than 32 entries")
     validated: dict[str, str] = {}
     seen: set[str] = set()
-    for name, value in headers.items():
+    raw_headers = cast(Mapping[object, object], headers)
+    for name, value in raw_headers.items():
+        if not isinstance(name, str) or not isinstance(value, str):
+            raise ValueError("extra_headers names and values must be strings")
         normalized_name = name.lower()
         if (
             not name
@@ -500,6 +503,17 @@ def _compact_json(value: object) -> str:
         ensure_ascii=True,
         separators=(",", ":"),
         sort_keys=True,
+    )
+
+
+def _tool_result_content(result: ToolResult) -> str:
+    if not result.is_error:
+        return result.content
+    return _compact_json(
+        {
+            "content": result.content,
+            "is_error": True,
+        }
     )
 
 
