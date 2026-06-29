@@ -210,8 +210,9 @@ All limits are immutable bounded Pydantic fields.
 
 Typed Agent events intentionally contain lifecycle metadata rather than prompts, arguments,
 results, patches, or command output. The journal additionally replaces explicitly configured
-secret values in string fields before hashing and storage. It cannot discover unknown secrets.
-Callers must pass configured Provider keys when constructing the Store.
+secret values in bounded free-form error text before hashing and storage. Identifiers and enum
+fields are not rewritten. The journal cannot discover unknown secrets. Callers must pass
+configured Provider keys when constructing the Store.
 
 `RunStopped.error` is bounded. Runtime-generated errors remain static public text.
 
