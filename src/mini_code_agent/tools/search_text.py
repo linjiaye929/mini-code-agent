@@ -4,7 +4,7 @@ import json
 from fnmatch import fnmatchcase
 from typing import ClassVar
 
-from pydantic import BaseModel, ConfigDict, Field, ValidationError
+from pydantic import BaseModel, ConfigDict, Field, ValidationError, field_validator
 
 from mini_code_agent.domain.content import ToolCall, ToolResult
 from mini_code_agent.tools.base import SideEffect, ToolDefinition
@@ -22,6 +22,13 @@ class _SearchArguments(BaseModel):
     case_sensitive: bool = True
     max_results: int = Field(default=50, ge=1, le=1_000)
 
+    @field_validator("query")
+    @classmethod
+    def reject_control_characters(cls, value: str) -> str:
+        if any(character in value for character in ("\0", "\r", "\n")):
+            raise ValueError("query cannot contain NUL or line breaks")
+        return value
+
 
 class SearchTextTool:
     _definition: ClassVar[ToolDefinition] = ToolDefinition(
@@ -34,6 +41,7 @@ class SearchTextTool:
                     "type": "string",
                     "minLength": 1,
                     "maxLength": 500,
+                    "pattern": "^[^\\u0000\\r\\n]+$",
                 },
                 "path": {
                     "type": "string",
@@ -126,21 +134,34 @@ class SearchTextTool:
                 if len(line) > self._limits.max_line_chars:
                     line = line[: self._limits.max_line_chars]
                     truncated = True
-                searchable = line if arguments.case_sensitive else line.casefold()
+                if arguments.case_sensitive:
+                    searchable = line
+                    original_positions: list[int] | None = None
+                else:
+                    searchable, original_positions = _casefold_with_positions(line)
                 offset = 0
                 while True:
                     index = searchable.find(needle, offset)
                     if index < 0:
                         break
+                    original_index = (
+                        index if original_positions is None else original_positions[index]
+                    )
+                    if original_positions is None:
+                        original_match_length = len(arguments.query)
+                    else:
+                        folded_end = index + len(needle) - 1
+                        original_end = original_positions[folded_end] + 1
+                        original_match_length = original_end - original_index
                     matches.append(
                         {
-                            "column": index + 1,
+                            "column": original_index + 1,
                             "line": line_number,
                             "path": source.path,
                             "preview": _preview(
                                 line,
-                                index,
-                                len(arguments.query),
+                                original_index,
+                                original_match_length,
                                 self._limits.max_preview_chars,
                             ),
                         }
@@ -212,3 +233,13 @@ def _preview(line: str, index: int, match_length: int, limit: int) -> str:
     end = min(len(line), start + limit)
     start = max(0, end - limit)
     return line[start:end]
+
+
+def _casefold_with_positions(value: str) -> tuple[str, list[int]]:
+    fragments: list[str] = []
+    positions: list[int] = []
+    for index, character in enumerate(value):
+        folded = character.casefold()
+        fragments.append(folded)
+        positions.extend([index] * len(folded))
+    return "".join(fragments), positions

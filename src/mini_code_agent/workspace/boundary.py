@@ -10,6 +10,16 @@ from mini_code_agent.workspace.errors import WorkspaceError, WorkspaceErrorCode
 from mini_code_agent.workspace.models import SearchLimits, WorkspaceLimits, WorkspaceTextFile
 
 _WINDOWS_DRIVE: Final = re.compile(r"^[A-Za-z]:")
+_WINDOWS_RESERVED_NAMES: Final = frozenset(
+    {
+        "AUX",
+        "CON",
+        "NUL",
+        "PRN",
+        *(f"COM{index}" for index in range(1, 10)),
+        *(f"LPT{index}" for index in range(1, 10)),
+    }
+)
 
 
 class WorkspaceBoundary:
@@ -240,9 +250,21 @@ class WorkspaceBoundary:
         ):
             raise self._invalid_path()
         parts = tuple(value.split("/"))
-        if any(part in {"", ".", "..", ".git"} for part in parts):
+        if any(not self._valid_part(part) for part in parts):
             raise self._invalid_path()
         return parts
+
+    @staticmethod
+    def _valid_part(part: str) -> bool:
+        stem = part.split(".", maxsplit=1)[0].upper()
+        return not (
+            part in {"", ".", ".."}
+            or part.casefold() == ".git"
+            or ":" in part
+            or part.rstrip(" .") != part
+            or stem in _WINDOWS_RESERVED_NAMES
+            or any(ord(character) < 32 for character in part)
+        )
 
     @staticmethod
     def _is_link_or_junction(path: Path) -> bool:

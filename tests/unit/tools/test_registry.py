@@ -56,6 +56,17 @@ class EchoTool:
         )
 
 
+class CountingDefinitionTool(EchoTool):
+    def __init__(self) -> None:
+        super().__init__()
+        self.definition_reads = 0
+
+    @property
+    def definition(self) -> ToolDefinition:
+        self.definition_reads += 1
+        return self._definition
+
+
 def error_payload(result: ToolResult) -> dict[str, object]:
     return json.loads(result.content)  # type: ignore[no-any-return]
 
@@ -131,6 +142,15 @@ def test_registry_rejects_invalid_json_schema() -> None:
                 )
             ]
         )
+
+
+def test_registry_snapshots_each_definition_once() -> None:
+    tool = CountingDefinitionTool()
+
+    registry = ToolRegistry([tool])
+
+    assert tool.definition_reads == 1
+    assert registry.definitions[0].name == "echo"
 
 
 @pytest.mark.asyncio

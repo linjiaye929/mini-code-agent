@@ -25,27 +25,26 @@ class _SchemaValidator(Protocol):
 class ToolRegistry:
     def __init__(self, tools: Iterable[RegisteredTool]) -> None:
         ordered_tools = tuple(tools)
-        names = tuple(tool.definition.name for tool in ordered_tools)
+        entries = tuple((tool, tool.definition) for tool in ordered_tools)
+        names = tuple(definition.name for _, definition in entries)
         if len(set(names)) != len(names):
             raise ValueError("Tool definitions must have unique names.")
 
         validators: dict[str, _SchemaValidator] = {}
-        for tool in ordered_tools:
-            schema = tool.definition.model_dump(mode="json")["input_schema"]
+        for _, definition in entries:
+            schema = definition.model_dump(mode="json")["input_schema"]
             try:
                 Draft202012Validator.check_schema(schema)
-                validators[tool.definition.name] = cast(
+                validators[definition.name] = cast(
                     _SchemaValidator,
                     Draft202012Validator(schema),
                 )
             except SchemaError:
-                raise ValueError(
-                    f"Tool {tool.definition.name!r} has an invalid JSON Schema."
-                ) from None
+                raise ValueError(f"Tool {definition.name!r} has an invalid JSON Schema.") from None
 
-        self._tools = {tool.definition.name: tool for tool in ordered_tools}
+        self._tools = {definition.name: tool for tool, definition in entries}
         self._validators = validators
-        self._definitions = tuple(tool.definition for tool in ordered_tools)
+        self._definitions = tuple(definition for _, definition in entries)
 
     @property
     def definitions(self) -> tuple[ToolDefinition, ...]:

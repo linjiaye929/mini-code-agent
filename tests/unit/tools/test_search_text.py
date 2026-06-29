@@ -118,6 +118,28 @@ async def test_search_supports_subdirectory_glob_and_case_insensitive_mode(
 
 
 @pytest.mark.asyncio
+async def test_case_insensitive_search_reports_original_unicode_column(
+    tmp_path: Path,
+) -> None:
+    (tmp_path / "unicode.txt").write_bytes("Straße NEEDLE\n".encode())
+    registry = ToolRegistry([tool_for(tmp_path)])
+
+    result = await registry.execute(
+        ToolCall(
+            id="call-1",
+            name="search_text",
+            arguments={"query": "needle", "case_sensitive": False},
+        )
+    )
+
+    match = cast(
+        list[dict[str, object]],
+        payload(result.content)["matches"],
+    )[0]
+    assert match["column"] == 8
+
+
+@pytest.mark.asyncio
 async def test_search_reports_no_matches(tmp_path: Path) -> None:
     (tmp_path / "file.txt").write_bytes(b"content\n")
     registry = ToolRegistry([tool_for(tmp_path)])
@@ -239,6 +261,26 @@ async def test_search_direct_call_rejects_invalid_arguments(tmp_path: Path) -> N
             id="call-1",
             name="search_text",
             arguments={"query": "", "max_results": 0},
+        )
+    )
+
+    error = cast(dict[str, object], payload(result.content)["error"])
+    assert error["code"] == "invalid_arguments"
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("query", ["line\nbreak", "nul\0query"])
+async def test_search_rejects_control_characters_in_query(
+    tmp_path: Path,
+    query: str,
+) -> None:
+    tool = tool_for(tmp_path)
+
+    result = await tool.execute(
+        ToolCall(
+            id="call-1",
+            name="search_text",
+            arguments={"query": query},
         )
     )
 
