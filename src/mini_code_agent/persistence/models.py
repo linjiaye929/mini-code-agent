@@ -31,7 +31,7 @@ class RunStatus(StrEnum):
 class SessionTraceLimits(BaseModel):
     model_config = ConfigDict(extra="forbid", frozen=True)
 
-    max_event_bytes: int = Field(default=65_536, ge=1_024, le=1_048_576)
+    max_event_bytes: int = Field(default=65_536, ge=256, le=1_048_576)
     max_events_per_session: int = Field(default=100_000, ge=1, le=1_000_000)
     max_query_rows: int = Field(default=1_000, ge=1, le=10_000)
     busy_timeout_ms: int = Field(default=250, ge=1, le=5_000)

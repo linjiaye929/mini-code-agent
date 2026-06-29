@@ -24,12 +24,13 @@ def test_session_trace_limits_have_bounded_defaults() -> None:
     assert limits.max_events_per_session == 100_000
     assert limits.max_query_rows == 1_000
     assert limits.busy_timeout_ms == 250
+    assert SessionTraceLimits(max_event_bytes=256).max_event_bytes == 256
 
 
 @pytest.mark.parametrize(
     "values",
     [
-        {"max_event_bytes": 1_023},
+        {"max_event_bytes": 255},
         {"max_event_bytes": 1_048_577},
         {"max_events_per_session": 0},
         {"max_events_per_session": 1_000_001},

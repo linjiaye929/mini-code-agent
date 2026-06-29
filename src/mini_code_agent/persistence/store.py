@@ -15,6 +15,7 @@ from mini_code_agent.persistence.errors import (
     PersistenceError,
     PersistenceErrorCode,
 )
+from mini_code_agent.persistence.journal import SessionEventJournal
 from mini_code_agent.persistence.models import (
     EMPTY_TRACE_SHA256,
     IDENTIFIER_PATTERN,
@@ -192,6 +193,17 @@ class SqliteSessionTraceStore:
                 (session_id, limit),
             ).fetchall()
         return tuple(_run_from_row(row) for row in rows)
+
+    def journal(self, session_id: str) -> SessionEventJournal:
+        self._ensure_initialized()
+        self._validate_identifier(session_id)
+        self.get_session(session_id)
+        return SessionEventJournal(
+            self._database,
+            self._limits,
+            session_id,
+            self._secrets,
+        )
 
     def _ensure_initialized(self) -> None:
         if not self._initialized:

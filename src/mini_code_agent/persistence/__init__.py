@@ -2,6 +2,7 @@ from mini_code_agent.persistence.errors import (
     PersistenceError,
     PersistenceErrorCode,
 )
+from mini_code_agent.persistence.journal import SessionEventJournal
 from mini_code_agent.persistence.models import (
     EMPTY_TRACE_SHA256,
     RunRecord,
@@ -24,6 +25,7 @@ __all__ = [
     "PersistenceErrorCode",
     "RunRecord",
     "RunStatus",
+    "SessionEventJournal",
     "SessionRecord",
     "SessionStatus",
     "SessionTraceLimits",
