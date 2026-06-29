@@ -16,7 +16,10 @@ from mini_code_agent.providers.base import (
     ModelRequest,
     ProviderError,
     ProviderErrorCode,
+    ResponseCompleted,
+    TextDelta,
     TokenUsage,
+    ToolCallDelta,
 )
 from mini_code_agent.tools.base import SideEffect, ToolDefinition
 
@@ -394,4 +397,331 @@ async def test_provider_close_does_not_close_borrowed_client() -> None:
     await provider.aclose()
 
     assert client.is_closed is False
+    await client.aclose()
+
+
+def encode_sse(events: list[tuple[str, dict[str, Any]]]) -> bytes:
+    chunks = [
+        f"event: {event_name}\ndata: {json.dumps(data, separators=(',', ':'))}\n\n"
+        for event_name, data in events
+    ]
+    return "".join(chunks).encode()
+
+
+def anthropic_stream_events() -> list[tuple[str, dict[str, Any]]]:
+    return [
+        (
+            "message_start",
+            {
+                "type": "message_start",
+                "message": {
+                    "id": "msg_1",
+                    "type": "message",
+                    "role": "assistant",
+                    "model": "claude-test",
+                    "content": [],
+                    "stop_reason": None,
+                    "stop_sequence": None,
+                    "usage": {"input_tokens": 10, "output_tokens": 1},
+                },
+            },
+        ),
+        (
+            "content_block_start",
+            {
+                "type": "content_block_start",
+                "index": 0,
+                "content_block": {"type": "text", "text": ""},
+            },
+        ),
+        (
+            "content_block_delta",
+            {
+                "type": "content_block_delta",
+                "index": 0,
+                "delta": {"type": "text_delta", "text": "Checking"},
+            },
+        ),
+        (
+            "content_block_stop",
+            {"type": "content_block_stop", "index": 0},
+        ),
+        (
+            "content_block_start",
+            {
+                "type": "content_block_start",
+                "index": 1,
+                "content_block": {
+                    "type": "tool_use",
+                    "id": "toolu_1",
+                    "name": "runtime_info",
+                    "input": {},
+                },
+            },
+        ),
+        (
+            "content_block_delta",
+            {
+                "type": "content_block_delta",
+                "index": 1,
+                "delta": {
+                    "type": "input_json_delta",
+                    "partial_json": '{"verbose":',
+                },
+            },
+        ),
+        (
+            "content_block_delta",
+            {
+                "type": "content_block_delta",
+                "index": 1,
+                "delta": {
+                    "type": "input_json_delta",
+                    "partial_json": "true}",
+                },
+            },
+        ),
+        (
+            "content_block_stop",
+            {"type": "content_block_stop", "index": 1},
+        ),
+        (
+            "message_delta",
+            {
+                "type": "message_delta",
+                "delta": {
+                    "stop_reason": "tool_use",
+                    "stop_sequence": None,
+                },
+                "usage": {"output_tokens": 7},
+            },
+        ),
+        ("message_stop", {"type": "message_stop"}),
+    ]
+
+
+def streaming_provider(
+    events: list[tuple[str, dict[str, Any]]],
+    *,
+    content_type: str = "text/event-stream",
+) -> tuple[AnthropicProvider, httpx.AsyncClient, dict[str, Any]]:
+    captured_body: dict[str, Any] = {}
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        captured_body.update(cast(dict[str, Any], json.loads(request.content)))
+        return httpx.Response(
+            200,
+            content=encode_sse(events),
+            headers={
+                "content-type": content_type,
+                "request-id": "req_stream_1",
+            },
+            request=request,
+        )
+
+    provider, client = provider_with_handler(handler)
+    return provider, client, captured_body
+
+
+@pytest.mark.asyncio
+async def test_stream_normalizes_text_tool_fragments_usage_and_completion() -> None:
+    provider, client, captured_body = streaming_provider(anthropic_stream_events())
+    request = ModelRequest(
+        request_id="request-1",
+        system_prompt="Work carefully.",
+        messages=(Message.user_text("inspect"),),
+        tools=(runtime_tool(),),
+    )
+
+    events = [event async for event in provider.stream(request)]
+
+    assert captured_body["stream"] is True
+    assert events[:3] == [
+        TextDelta(text="Checking"),
+        ToolCallDelta(
+            index=1,
+            tool_call_id="toolu_1",
+            name="runtime_info",
+            partial_json='{"verbose":',
+        ),
+        ToolCallDelta(
+            index=1,
+            tool_call_id="toolu_1",
+            name="runtime_info",
+            partial_json="true}",
+        ),
+    ]
+    completed = cast(ResponseCompleted, events[3])
+    assert completed.response.finish_reason is FinishReason.TOOL_CALL
+    assert completed.response.message.text == "Checking"
+    assert completed.response.message.tool_calls == (
+        ToolCall(
+            id="toolu_1",
+            name="runtime_info",
+            arguments={"verbose": True},
+        ),
+    )
+    assert completed.response.usage == TokenUsage(input_tokens=10, output_tokens=7)
+    assert completed.response.provider_request_id == "req_stream_1"
+    await client.aclose()
+
+
+@pytest.mark.asyncio
+async def test_stream_ignores_ping_and_unknown_top_level_events() -> None:
+    wire_events = anthropic_stream_events()
+    wire_events.insert(1, ("ping", {"type": "ping"}))
+    wire_events.insert(2, ("future_event", {"type": "future_event", "value": 1}))
+    provider, client, _ = streaming_provider(wire_events)
+
+    events = [
+        event
+        async for event in provider.stream(
+            ModelRequest(
+                request_id="request-1",
+                system_prompt="",
+                messages=(Message.user_text("inspect"),),
+            )
+        )
+    ]
+
+    assert isinstance(events[-1], ResponseCompleted)
+    await client.aclose()
+
+
+def mutate_event(
+    events: list[tuple[str, dict[str, Any]]],
+    event_name: str,
+    mutation: Callable[[dict[str, Any]], None],
+) -> list[tuple[str, dict[str, Any]]]:
+    copied = [(name, json.loads(json.dumps(data))) for name, data in events]
+    for name, data in copied:
+        if name == event_name:
+            mutation(data)
+            return copied
+    raise AssertionError(f"event {event_name} not found")
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    "wire_events",
+    cast(
+        list[list[tuple[str, dict[str, Any]]]],
+        [
+            anthropic_stream_events()[1:],
+            anthropic_stream_events()[:-1],
+            mutate_event(
+                anthropic_stream_events(),
+                "message_start",
+                lambda data: data["message"]["usage"].update({"input_tokens": -1}),
+            ),
+            mutate_event(
+                anthropic_stream_events(),
+                "content_block_start",
+                lambda data: data.update({"index": 2}),
+            ),
+            mutate_event(
+                anthropic_stream_events(),
+                "content_block_delta",
+                lambda data: data.update({"index": 9}),
+            ),
+            mutate_event(
+                anthropic_stream_events(),
+                "message_delta",
+                lambda data: data["delta"].update({"stop_reason": "pause_turn"}),
+            ),
+            [
+                *anthropic_stream_events()[:-1],
+                (
+                    "content_block_start",
+                    {
+                        "type": "content_block_start",
+                        "index": 1,
+                        "content_block": {
+                            "type": "tool_use",
+                            "id": "toolu_1",
+                            "name": "runtime_info",
+                            "input": {},
+                        },
+                    },
+                ),
+                ("message_stop", {"type": "message_stop"}),
+            ],
+        ],
+    ),
+)
+async def test_stream_rejects_invalid_lifecycle(
+    wire_events: list[tuple[str, dict[str, Any]]],
+) -> None:
+    provider, client, _ = streaming_provider(wire_events)
+    request = ModelRequest(
+        request_id="request-1",
+        system_prompt="",
+        messages=(Message.user_text("inspect"),),
+    )
+
+    with pytest.raises(ProviderError) as captured:
+        _ = [event async for event in provider.stream(request)]
+
+    assert captured.value.code is ProviderErrorCode.INVALID_RESPONSE
+    assert captured.value.retryable is False
+    await client.aclose()
+
+
+@pytest.mark.asyncio
+async def test_stream_rejects_invalid_tool_json_without_completed_event() -> None:
+    wire_events = [
+        (name, data)
+        for name, data in anthropic_stream_events()
+        if not (name == "content_block_delta" and data["delta"].get("partial_json") == "true}")
+    ]
+    provider, client, _ = streaming_provider(wire_events)
+    emitted: list[object] = []
+
+    with pytest.raises(ProviderError):
+        async for event in provider.stream(
+            ModelRequest(
+                request_id="request-1",
+                system_prompt="",
+                messages=(Message.user_text("inspect"),),
+            )
+        ):
+            emitted.append(event)
+
+    assert not any(isinstance(event, ResponseCompleted) for event in emitted)
+    await client.aclose()
+
+
+@pytest.mark.asyncio
+async def test_stream_normalizes_in_stream_error_without_leaking_message() -> None:
+    secret = "secret-provider-detail"
+    wire_events = [
+        anthropic_stream_events()[0],
+        (
+            "error",
+            {
+                "type": "error",
+                "error": {
+                    "type": "overloaded_error",
+                    "message": f"overloaded {secret}",
+                },
+            },
+        ),
+    ]
+    provider, client, _ = streaming_provider(wire_events)
+
+    with pytest.raises(ProviderError) as captured:
+        _ = [
+            event
+            async for event in provider.stream(
+                ModelRequest(
+                    request_id="request-1",
+                    system_prompt="",
+                    messages=(Message.user_text("inspect"),),
+                )
+            )
+        ]
+
+    assert captured.value.code is ProviderErrorCode.SERVER
+    assert captured.value.retryable is True
+    assert secret not in str(captured.value)
     await client.aclose()

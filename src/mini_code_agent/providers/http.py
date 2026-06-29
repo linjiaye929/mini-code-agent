@@ -78,7 +78,7 @@ class ProviderHttpTransport:
         except httpx.RequestError:
             raise _network_error() from None
 
-        return _decode_json_object(content), request_id
+        return decode_json_object(content), request_id
 
     def stream_sse(
         self,
@@ -220,7 +220,7 @@ def _reject_json_constant(value: str) -> None:
     raise ValueError(f"invalid JSON constant: {value}")
 
 
-def _decode_json_object(content: bytes) -> JsonObject:
+def decode_json_object(content: bytes) -> JsonObject:
     try:
         decoded = content.decode("utf-8")
         value = json.loads(decoded, parse_constant=_reject_json_constant)
