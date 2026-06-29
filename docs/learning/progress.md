@@ -412,12 +412,17 @@
 - Checkpoints contain full conversation/tool state as bounded plaintext. Encryption, signed audit,
   distributed leases, external reconciliation, and exactly-once execution remain non-claims.
 
-## M3c Current Verification
+## M3c Local Verification
 
-- Agent/Checkpoint/Persistence and selected integration suite: 156 passed; 1 Windows symlink
-  privilege skip.
+- Full Python 3.12.13 and 3.13.14 development suite: 551 passed per interpreter; 4 Windows
+  symlink privilege skips per interpreter.
+- Python 3.13 branch-aware package coverage: 89.89%, above the configured 85% gate.
 - Resume analysis/claim plus process-boundary integration: 16 passed.
 - Concurrent claim test produced exactly one winner in five consecutive runs.
 - Ruff and strict Pyright: passed.
-- Dual-Python full-suite, coverage, security, build, and artifact smoke evidence will be recorded
-  only after the `v0.9.0-alpha.0` release gates complete.
+- Bandit: no unsuppressed findings. pip-audit found no known dependency vulnerabilities; the
+  unpublished local package itself was skipped because it is not on PyPI.
+- Hashed build produced `mini_code_agent-0.9.0a0-py3-none-any.whl` and
+  `mini_code_agent-0.9.0a0.tar.gz`.
+- The exact wheel and sdist passed four isolated console-script smoke tests on Python 3.12 and
+  3.13.

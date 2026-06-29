@@ -90,7 +90,7 @@ replaying uncheckpointed side effects.
 
 ## Task 9: Documentation and Release
 
-**Status:** In progress
+**Status:** Release gates complete; merge pending
 
 - Add architecture guide and ADR; update threat model and M3b non-claims.
 - Expand learning map/progress with Java transaction and Flink checkpoint analogies plus exercises.
