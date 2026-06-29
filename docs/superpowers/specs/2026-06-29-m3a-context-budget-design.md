@@ -72,10 +72,10 @@ JSON structural overhead, message/content tags, ToolCall arguments, and Tool sch
 
 Default limits:
 
-- maximum estimated input: 32,768 tokens;
+- maximum estimated context: 32,768 tokens;
 - reserved output: 4,096 tokens;
 - usable estimated request budget: 28,672 tokens;
-- hard configurable maximum input: 1,000,000 tokens;
+- hard configurable maximum context: 1,000,000 tokens;
 - compaction marker: at most 500 characters.
 
 This is an estimate, not a vendor tokenizer guarantee. A provider can still reject a request.
