@@ -60,7 +60,7 @@ replaying uncheckpointed side effects.
 
 ## Task 6: Atomic Resume Claim
 
-**Status:** Pending
+**Status:** Complete
 
 - Revalidate the plan under `BEGIN IMMEDIATE`.
 - Atomically append interrupted source `RunStopped`, append resumed `RunStarted`, and consume the

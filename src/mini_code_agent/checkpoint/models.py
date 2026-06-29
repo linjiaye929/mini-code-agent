@@ -144,6 +144,13 @@ class ResumePlan(BaseModel):
     requires_read_only_retry: bool = False
 
 
+class ResumeState(BaseModel):
+    model_config = ConfigDict(extra="forbid", frozen=True)
+
+    checkpoint: CheckpointSnapshot
+    resumed_run_id: str = Field(pattern=_IDENTIFIER_PATTERN)
+
+
 def _validate_state(
     messages: tuple[Message, ...],
     turns: int,

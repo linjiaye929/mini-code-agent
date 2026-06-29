@@ -15,9 +15,12 @@ from mini_code_agent.agent.events import (
     ContextCompacted,
     ModelCompleted,
     ModelStarted,
+    RunStarted,
+    RunStopped,
     ToolCompleted,
     ToolStarted,
 )
+from mini_code_agent.agent.models import StopReason
 from mini_code_agent.checkpoint.models import (
     CheckpointLimits,
     CheckpointSnapshot,
@@ -25,16 +28,21 @@ from mini_code_agent.checkpoint.models import (
     ResumeCompatibility,
     ResumePlan,
     ResumePolicy,
+    ResumeState,
 )
 from mini_code_agent.persistence.checkpoints import (
     SessionCheckpointJournal,
     checkpoint_from_row,
 )
+from mini_code_agent.persistence.codec import encode_event
 from mini_code_agent.persistence.errors import (
     PersistenceError,
     PersistenceErrorCode,
 )
-from mini_code_agent.persistence.journal import SessionEventJournal
+from mini_code_agent.persistence.journal import (
+    SessionEventJournal,
+    append_event_in_transaction,
+)
 from mini_code_agent.persistence.models import (
     EMPTY_TRACE_SHA256,
     IDENTIFIER_PATTERN,
@@ -366,12 +374,8 @@ class SqliteSessionTraceStore:
                     raise _resume_trace_corrupt()
             after_sequence = records[-1].sequence
 
-        if (
-            (requires_model_retry and not active_policy.allow_model_retry)
-            or (
-                requires_read_only_retry
-                and not active_policy.allow_read_only_retry
-            )
+        if (requires_model_retry and not active_policy.allow_model_retry) or (
+            requires_read_only_retry and not active_policy.allow_read_only_retry
         ):
             raise PersistenceError(
                 PersistenceErrorCode.REPLAY_REQUIRES_APPROVAL,
@@ -384,6 +388,128 @@ class SqliteSessionTraceStore:
             requires_model_retry=requires_model_retry,
             requires_read_only_retry=requires_read_only_retry,
         )
+
+    def claim_resume(
+        self,
+        plan: ResumePlan,
+        *,
+        resumed_run_id: str,
+        max_turns: int,
+    ) -> ResumeState:
+        self._ensure_initialized()
+        self._validate_identifier(resumed_run_id)
+        checkpoint = plan.checkpoint
+        timestamp = max(datetime.now(UTC), checkpoint.created_at)
+        stopped = RunStopped(
+            run_id=checkpoint.source_run_id,
+            timestamp=timestamp,
+            turns=checkpoint.turns,
+            reason=StopReason.INTERRUPTED,
+            tool_calls=checkpoint.tool_calls,
+            usage=checkpoint.usage,
+        )
+        started = RunStarted(
+            run_id=resumed_run_id,
+            timestamp=timestamp,
+            max_turns=max_turns,
+        )
+        stopped_payload, stopped_json = encode_event(stopped, self._secrets)
+        started_payload, started_json = encode_event(started, self._secrets)
+
+        with connect_database(self._database, self._limits) as connection:
+            try:
+                connection.execute("BEGIN IMMEDIATE")
+                session = connection.execute(
+                    """
+                    SELECT event_count, trace_head_sha256, status, last_run_id
+                    FROM sessions WHERE session_id = ?
+                    """,
+                    (checkpoint.session_id,),
+                ).fetchone()
+                row = connection.execute(
+                    """
+                    SELECT * FROM checkpoints
+                    WHERE session_id = ? AND checkpoint_id = ?
+                    """,
+                    (checkpoint.session_id, checkpoint.checkpoint_id),
+                ).fetchone()
+                source = connection.execute(
+                    "SELECT status FROM runs WHERE session_id = ? AND run_id = ?",
+                    (checkpoint.session_id, checkpoint.source_run_id),
+                ).fetchone()
+                if (
+                    session is None
+                    or row is None
+                    or source is None
+                    or int(session["event_count"]) != plan.analyzed_event_count
+                    or str(session["trace_head_sha256"]) != plan.analyzed_trace_head_sha256
+                    or str(session["status"]) != SessionStatus.ACTIVE.value
+                    or str(session["last_run_id"]) != checkpoint.source_run_id
+                    or str(source["status"]) != RunStatus.ACTIVE.value
+                    or str(row["status"]) != CheckpointStatus.AVAILABLE.value
+                    or checkpoint_from_row(row).payload_sha256 != checkpoint.payload_sha256
+                ):
+                    raise PersistenceError(
+                        PersistenceErrorCode.CHECKPOINT_STALE,
+                        "Resume plan is stale.",
+                    )
+                for event, payload, payload_json in (
+                    (stopped, stopped_payload, stopped_json),
+                    (started, started_payload, started_json),
+                ):
+                    appended = append_event_in_transaction(
+                        connection,
+                        self._limits,
+                        checkpoint.session_id,
+                        event,
+                        payload,
+                        payload_json,
+                    )
+                    if appended is None:
+                        raise PersistenceError(
+                            PersistenceErrorCode.CHECKPOINT_STALE,
+                            "Resume plan is stale.",
+                        )
+                consumed_at = timestamp.isoformat()
+                updated = connection.execute(
+                    """
+                    UPDATE checkpoints
+                    SET status = 'consumed', resumed_run_id = ?, consumed_at = ?
+                    WHERE session_id = ? AND checkpoint_id = ? AND status = 'available'
+                    """,
+                    (
+                        resumed_run_id,
+                        consumed_at,
+                        checkpoint.session_id,
+                        checkpoint.checkpoint_id,
+                    ),
+                )
+                if updated.rowcount != 1:
+                    raise PersistenceError(
+                        PersistenceErrorCode.CHECKPOINT_STALE,
+                        "Resume plan is stale.",
+                    )
+                consumed = connection.execute(
+                    "SELECT * FROM checkpoints WHERE checkpoint_id = ?",
+                    (checkpoint.checkpoint_id,),
+                ).fetchone()
+                if consumed is None:
+                    raise _resume_trace_corrupt()
+                state = ResumeState(
+                    checkpoint=checkpoint_from_row(consumed),
+                    resumed_run_id=resumed_run_id,
+                )
+                connection.commit()
+                return state
+            except PersistenceError:
+                connection.rollback()
+                raise
+            except (sqlite3.Error, TypeError, ValueError, ValidationError):
+                connection.rollback()
+                raise PersistenceError(
+                    PersistenceErrorCode.STORAGE_FAILED,
+                    "Resume could not be claimed.",
+                ) from None
 
     def read_trace(
         self,

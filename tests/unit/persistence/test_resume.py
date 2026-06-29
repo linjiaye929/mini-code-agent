@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import sqlite3
+from contextlib import closing
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
@@ -12,6 +14,7 @@ from mini_code_agent.agent.events import (
     ToolCompleted,
     ToolStarted,
 )
+from mini_code_agent.agent.models import StopReason
 from mini_code_agent.checkpoint.models import (
     CheckpointDraft,
     ResumeCompatibility,
@@ -20,6 +23,7 @@ from mini_code_agent.checkpoint.models import (
 from mini_code_agent.domain.content import ToolCall, ToolResult
 from mini_code_agent.domain.messages import Message, MessageRole
 from mini_code_agent.persistence.errors import PersistenceError, PersistenceErrorCode
+from mini_code_agent.persistence.models import RunStatus
 from mini_code_agent.persistence.store import SqliteSessionTraceStore
 from mini_code_agent.providers.base import FinishReason, TokenUsage
 from mini_code_agent.tools.base import SideEffect
@@ -268,3 +272,85 @@ def test_resume_analysis_rejects_checkpoint_older_than_latest(tmp_path: Path) ->
         )
 
     assert captured.value.code is PersistenceErrorCode.CHECKPOINT_STALE
+
+
+def test_resume_claim_atomically_interrupts_source_and_starts_new_run(
+    tmp_path: Path,
+) -> None:
+    store = active_store(tmp_path / "state.db")
+    saved = store.checkpoints("session-1").save(draft())
+    plan = store.analyze_resume(
+        "session-1",
+        saved.checkpoint_id,
+        compatibility=compatibility(),
+    )
+
+    state = store.claim_resume(plan, resumed_run_id="run-2", max_turns=8)
+
+    source = store.get_run("session-1", "run-1")
+    resumed = store.get_run("session-1", "run-2")
+    checkpoint = store.get_checkpoint("session-1", saved.checkpoint_id)
+    assert state.checkpoint == checkpoint
+    assert checkpoint.status.value == "consumed"
+    assert checkpoint.resumed_run_id == "run-2"
+    assert source.status is RunStatus.STOPPED
+    assert source.stop_reason is StopReason.INTERRUPTED
+    assert resumed.status is RunStatus.ACTIVE
+    assert store.get_session("session-1").last_run_id == "run-2"
+    assert store.get_session("session-1").event_count == plan.analyzed_event_count + 2
+
+
+def test_resume_claim_rejects_stale_plan_without_mutation(tmp_path: Path) -> None:
+    store = active_store(tmp_path / "state.db")
+    saved = store.checkpoints("session-1").save(draft())
+    plan = store.analyze_resume(
+        "session-1",
+        saved.checkpoint_id,
+        compatibility=compatibility(),
+    )
+    store.journal("session-1").append(
+        ModelStarted(
+            run_id="run-1",
+            timestamp=saved.created_at + timedelta(milliseconds=1),
+            turn=2,
+            request_id="run-1:2",
+        )
+    )
+    before = store.get_session("session-1")
+
+    with pytest.raises(PersistenceError) as captured:
+        store.claim_resume(plan, resumed_run_id="run-2", max_turns=8)
+
+    assert captured.value.code is PersistenceErrorCode.CHECKPOINT_STALE
+    assert store.get_session("session-1") == before
+    assert store.get_run("session-1", "run-1").status is RunStatus.ACTIVE
+
+
+def test_resume_claim_rolls_back_both_events_when_consumption_fails(
+    tmp_path: Path,
+) -> None:
+    database = tmp_path / "state.db"
+    store = active_store(database)
+    saved = store.checkpoints("session-1").save(draft())
+    plan = store.analyze_resume(
+        "session-1",
+        saved.checkpoint_id,
+        compatibility=compatibility(),
+    )
+    with closing(sqlite3.connect(database)) as connection, connection:
+        connection.execute(
+            """
+            CREATE TRIGGER fail_consumption BEFORE UPDATE OF status ON checkpoints
+            BEGIN SELECT RAISE(ABORT, 'secret claim failure'); END
+            """
+        )
+
+    with pytest.raises(PersistenceError) as captured:
+        store.claim_resume(plan, resumed_run_id="run-2", max_turns=8)
+
+    assert captured.value.code is PersistenceErrorCode.STORAGE_FAILED
+    assert store.get_session("session-1").event_count == plan.analyzed_event_count
+    assert store.get_run("session-1", "run-1").status is RunStatus.ACTIVE
+    with pytest.raises(PersistenceError) as missing:
+        store.get_run("session-1", "run-2")
+    assert missing.value.code is PersistenceErrorCode.RUN_NOT_FOUND
