@@ -32,6 +32,8 @@ def test_workspace_error_codes_are_stable() -> None:
         "binary_file",
         "invalid_encoding",
         "traversal_budget",
+        "conflict",
+        "write_failed",
     }
 
 
@@ -49,6 +51,10 @@ def test_workspace_limits_have_safe_defaults() -> None:
         {"max_file_bytes": 16 * 1024 * 1024 + 1},
         {"max_path_chars": 0},
         {"max_path_chars": 1025},
+        {"max_write_bytes": 0},
+        {"max_write_bytes": 16 * 1024 * 1024 + 1},
+        {"max_diff_chars": 0},
+        {"max_diff_chars": 1024 * 1024 + 1},
     ],
 )
 def test_workspace_limits_have_hard_upper_bounds(kwargs: dict[str, int]) -> None:

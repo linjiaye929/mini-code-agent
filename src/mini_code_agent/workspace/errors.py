@@ -13,6 +13,8 @@ class WorkspaceErrorCode(StrEnum):
     BINARY_FILE = "binary_file"
     INVALID_ENCODING = "invalid_encoding"
     TRAVERSAL_BUDGET = "traversal_budget"
+    CONFLICT = "conflict"
+    WRITE_FAILED = "write_failed"
 
 
 class WorkspaceError(RuntimeError):

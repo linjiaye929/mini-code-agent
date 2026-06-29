@@ -6,6 +6,8 @@ class WorkspaceLimits(BaseModel):
 
     max_file_bytes: int = Field(default=1024 * 1024, ge=1, le=16 * 1024 * 1024)
     max_path_chars: int = Field(default=1024, ge=1, le=1024)
+    max_write_bytes: int = Field(default=1024 * 1024, ge=1, le=16 * 1024 * 1024)
+    max_diff_chars: int = Field(default=32_768, ge=1, le=1024 * 1024)
 
 
 class SearchLimits(BaseModel):
@@ -30,3 +32,19 @@ class WorkspaceTextFile(BaseModel):
     text: str
     byte_count: int = Field(ge=0, le=16 * 1024 * 1024)
     line_count: int = Field(ge=0)
+
+
+class MutationPreview(BaseModel):
+    model_config = ConfigDict(extra="forbid", frozen=True)
+
+    path: str = Field(min_length=1, max_length=1024)
+    created: bool
+    before_sha256: str | None = Field(default=None, pattern=r"^[0-9a-f]{64}$")
+    after_sha256: str = Field(pattern=r"^[0-9a-f]{64}$")
+    byte_count: int = Field(ge=0, le=16 * 1024 * 1024)
+    line_count: int = Field(ge=0)
+    diff: str = Field(max_length=1024 * 1024)
+
+
+class MutationResult(MutationPreview):
+    pass

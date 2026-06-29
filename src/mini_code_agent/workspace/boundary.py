@@ -1,13 +1,25 @@
 from __future__ import annotations
 
+import difflib
+import hashlib
+import os
 import re
 import stat
+import tempfile
+from contextlib import suppress
+from dataclasses import dataclass
 from os import fstat
 from pathlib import Path
 from typing import Final
 
 from mini_code_agent.workspace.errors import WorkspaceError, WorkspaceErrorCode
-from mini_code_agent.workspace.models import SearchLimits, WorkspaceLimits, WorkspaceTextFile
+from mini_code_agent.workspace.models import (
+    MutationPreview,
+    MutationResult,
+    SearchLimits,
+    WorkspaceLimits,
+    WorkspaceTextFile,
+)
 
 _WINDOWS_DRIVE: Final = re.compile(r"^[A-Za-z]:")
 _WINDOWS_RESERVED_NAMES: Final = frozenset(
@@ -20,6 +32,19 @@ _WINDOWS_RESERVED_NAMES: Final = frozenset(
         *(f"LPT{index}" for index in range(1, 10)),
     }
 )
+_SHA256_PATTERN: Final = re.compile(r"^[0-9a-f]{64}$")
+
+
+@dataclass(frozen=True, slots=True)
+class _PreparedMutation:
+    path: str
+    target: Path
+    content: bytes
+    created: bool
+    before_sha256: str | None
+    after_sha256: str
+    diff: str
+    mode: int
 
 
 class WorkspaceBoundary:
@@ -206,6 +231,180 @@ class WorkspaceBoundary:
 
         return tuple(sorted(files, key=lambda path: (path.casefold(), path)))
 
+    def preview_write(
+        self,
+        untrusted_path: str,
+        content: str,
+        *,
+        expected_sha256: str | None,
+    ) -> MutationPreview:
+        prepared = self._prepare_write(
+            untrusted_path,
+            content,
+            expected_sha256=expected_sha256,
+        )
+        return MutationPreview(
+            path=prepared.path,
+            created=prepared.created,
+            before_sha256=prepared.before_sha256,
+            after_sha256=prepared.after_sha256,
+            byte_count=len(prepared.content),
+            line_count=len(content.splitlines()),
+            diff=prepared.diff,
+        )
+
+    def apply_write(
+        self,
+        untrusted_path: str,
+        content: str,
+        *,
+        expected_sha256: str | None,
+    ) -> MutationResult:
+        prepared = self._prepare_write(
+            untrusted_path,
+            content,
+            expected_sha256=expected_sha256,
+        )
+        temp_path: Path | None = None
+        try:
+            with tempfile.NamedTemporaryFile(
+                mode="wb",
+                prefix=".mini-code-agent-",
+                suffix=".tmp",
+                dir=prepared.target.parent,
+                delete=False,
+            ) as stream:
+                temp_path = Path(stream.name)
+                stream.write(prepared.content)
+                stream.flush()
+                os.fsync(stream.fileno())
+            temp_path.chmod(prepared.mode)
+            self._verify_precondition(prepared)
+            if prepared.created:
+                try:
+                    os.link(temp_path, prepared.target)
+                except FileExistsError:
+                    raise self._conflict() from None
+                temp_path.unlink()
+                temp_path = None
+            else:
+                os.replace(temp_path, prepared.target)
+                temp_path = None
+        except WorkspaceError:
+            raise
+        except OSError:
+            raise WorkspaceError(
+                WorkspaceErrorCode.WRITE_FAILED,
+                "Workspace file could not be written atomically.",
+            ) from None
+        finally:
+            if temp_path is not None:
+                with suppress(OSError):
+                    temp_path.unlink(missing_ok=True)
+
+        return MutationResult(
+            path=prepared.path,
+            created=prepared.created,
+            before_sha256=prepared.before_sha256,
+            after_sha256=prepared.after_sha256,
+            byte_count=len(prepared.content),
+            line_count=len(content.splitlines()),
+            diff=prepared.diff,
+        )
+
+    def _prepare_write(
+        self,
+        untrusted_path: str,
+        content: str,
+        *,
+        expected_sha256: str | None,
+    ) -> _PreparedMutation:
+        parts = self._validate_relative_path(untrusted_path)
+        if expected_sha256 is not None and not _SHA256_PATTERN.fullmatch(expected_sha256):
+            raise self._conflict()
+        if "\0" in content:
+            raise WorkspaceError(
+                WorkspaceErrorCode.BINARY_FILE,
+                "Workspace file content is binary.",
+            )
+        try:
+            encoded = content.encode("utf-8")
+        except UnicodeEncodeError:
+            raise WorkspaceError(
+                WorkspaceErrorCode.INVALID_ENCODING,
+                "Workspace file content is not valid UTF-8 text.",
+            ) from None
+        if len(encoded) > self._limits.max_write_bytes:
+            raise self._too_large()
+
+        parent = self._root if len(parts) == 1 else self._resolve_directory("/".join(parts[:-1]))
+        target = parent / parts[-1]
+        if self._is_link_or_junction(target):
+            raise WorkspaceError(
+                WorkspaceErrorCode.LINK_TRAVERSAL,
+                "Workspace path traverses a link.",
+            )
+
+        created = not target.exists()
+        before_text = ""
+        before_sha256: str | None = None
+        mode = 0o644
+        if created:
+            if expected_sha256 is not None:
+                raise self._conflict()
+        else:
+            current = self.read_text(untrusted_path)
+            current_bytes = _read_bounded_bytes(
+                target,
+                self._limits.max_write_bytes,
+            )
+            before_sha256 = _sha256(current_bytes)
+            if expected_sha256 is None or before_sha256 != expected_sha256:
+                raise self._conflict()
+            if current_bytes == encoded:
+                raise self._conflict()
+            before_text = current.text
+            mode = stat.S_IMODE(target.stat(follow_symlinks=False).st_mode)
+
+        after_sha256 = _sha256(encoded)
+        diff = "".join(
+            difflib.unified_diff(
+                before_text.splitlines(keepends=True),
+                content.splitlines(keepends=True),
+                fromfile=f"a/{untrusted_path}",
+                tofile=f"b/{untrusted_path}",
+            )
+        )
+        diff = _truncate_diff(diff, self._limits.max_diff_chars)
+        return _PreparedMutation(
+            path=untrusted_path,
+            target=target,
+            content=encoded,
+            created=created,
+            before_sha256=before_sha256,
+            after_sha256=after_sha256,
+            diff=diff,
+            mode=mode,
+        )
+
+    def _verify_precondition(self, prepared: _PreparedMutation) -> None:
+        if prepared.created:
+            if prepared.target.exists() or self._is_link_or_junction(prepared.target):
+                raise self._conflict()
+            return
+        resolved = self.resolve_file(prepared.path)
+        try:
+            current_hash = _sha256(
+                _read_bounded_bytes(
+                    resolved,
+                    self._limits.max_write_bytes,
+                )
+            )
+        except WorkspaceError:
+            raise self._conflict() from None
+        if current_hash != prepared.before_sha256:
+            raise self._conflict()
+
     def _resolve_directory(self, untrusted_path: str) -> Path:
         parts = self._validate_relative_path(untrusted_path)
         candidate = self._root.joinpath(*parts)
@@ -296,3 +495,47 @@ class WorkspaceBoundary:
             WorkspaceErrorCode.TRAVERSAL_BUDGET,
             message,
         )
+
+    @staticmethod
+    def _conflict() -> WorkspaceError:
+        return WorkspaceError(
+            WorkspaceErrorCode.CONFLICT,
+            "Workspace file changed or write precondition failed.",
+        )
+
+
+def _sha256(content: bytes) -> str:
+    return hashlib.sha256(content).hexdigest()
+
+
+def _read_bounded_bytes(path: Path, limit: int) -> bytes:
+    try:
+        with path.open("rb") as stream:
+            if not stat.S_ISREG(fstat(stream.fileno()).st_mode):
+                raise WorkspaceError(
+                    WorkspaceErrorCode.WRONG_FILE_TYPE,
+                    "Workspace path is not a regular file.",
+                )
+            content = stream.read(limit + 1)
+    except WorkspaceError:
+        raise
+    except OSError:
+        raise WorkspaceError(
+            WorkspaceErrorCode.WRITE_FAILED,
+            "Workspace file could not be read for writing.",
+        ) from None
+    if len(content) > limit:
+        raise WorkspaceError(
+            WorkspaceErrorCode.TOO_LARGE,
+            "Workspace file exceeds the configured size limit.",
+        )
+    return content
+
+
+def _truncate_diff(diff: str, limit: int) -> str:
+    if len(diff) <= limit:
+        return diff
+    marker = "\n... diff truncated ...\n"
+    if limit <= len(marker):
+        return marker[:limit]
+    return f"{diff[: limit - len(marker)]}{marker}"
