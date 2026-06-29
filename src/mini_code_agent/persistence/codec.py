@@ -11,7 +11,7 @@ from mini_code_agent.persistence.errors import (
     PersistenceError,
     PersistenceErrorCode,
 )
-from mini_code_agent.persistence.models import SCHEMA_VERSION
+from mini_code_agent.persistence.models import TRACE_SCHEMA_VERSION
 
 _EVENT_ADAPTER = TypeAdapter[AgentEvent](AgentEvent)
 
@@ -51,7 +51,7 @@ def event_sha256(
     envelope = {
         "event": event_payload,
         "previous_sha256": previous_sha256,
-        "schema_version": SCHEMA_VERSION,
+        "schema_version": TRACE_SCHEMA_VERSION,
         "sequence": sequence,
         "session_id": session_id,
     }

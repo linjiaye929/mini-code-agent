@@ -12,7 +12,7 @@ from mini_code_agent.agent.models import StopReason
 IDENTIFIER_PATTERN = r"^[A-Za-z0-9][A-Za-z0-9._-]{0,95}$"
 SHA256_PATTERN = r"^[0-9a-f]{64}$"
 EMPTY_TRACE_SHA256 = "0" * 64
-SCHEMA_VERSION = 1
+TRACE_SCHEMA_VERSION = 1
 
 
 class SessionStatus(StrEnum):
@@ -41,7 +41,7 @@ class SessionRecord(BaseModel):
     model_config = ConfigDict(extra="forbid", frozen=True)
 
     session_id: str = Field(pattern=IDENTIFIER_PATTERN)
-    schema_version: Literal[1] = SCHEMA_VERSION
+    schema_version: Literal[1] = TRACE_SCHEMA_VERSION
     created_at: datetime
     updated_at: datetime
     status: SessionStatus
@@ -93,7 +93,7 @@ class RunRecord(BaseModel):
 class TraceRecord(BaseModel):
     model_config = ConfigDict(extra="forbid", frozen=True)
 
-    schema_version: Literal[1] = SCHEMA_VERSION
+    schema_version: Literal[1] = TRACE_SCHEMA_VERSION
     sequence: int = Field(ge=1, le=1_000_000)
     session_id: str = Field(pattern=IDENTIFIER_PATTERN)
     event: AgentEvent

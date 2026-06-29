@@ -10,7 +10,7 @@ from mini_code_agent.persistence.codec import (
 )
 from mini_code_agent.persistence.models import (
     EMPTY_TRACE_SHA256,
-    SCHEMA_VERSION,
+    TRACE_SCHEMA_VERSION,
     SessionRecord,
     SessionTraceLimits,
     TraceRecord,
@@ -120,7 +120,7 @@ def _decode_row(
         current_sha256 = str(row["event_sha256"])
     except (IndexError, TypeError, ValueError):
         raise trace_corrupt() from None
-    if schema_version != SCHEMA_VERSION:
+    if schema_version != TRACE_SCHEMA_VERSION:
         raise trace_corrupt()
 
     payload, event = decode_event(payload_json)

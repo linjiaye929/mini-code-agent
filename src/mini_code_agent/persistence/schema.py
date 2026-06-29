@@ -9,11 +9,14 @@ from mini_code_agent.persistence.errors import (
     PersistenceError,
     PersistenceErrorCode,
 )
-from mini_code_agent.persistence.models import SCHEMA_VERSION, SessionTraceLimits
+from mini_code_agent.persistence.models import SessionTraceLimits
 
-_REQUIRED_TABLES = frozenset({"sessions", "runs", "trace_events"})
+DATABASE_SCHEMA_VERSION = 2
 
-_SCHEMA_STATEMENTS = (
+_V1_REQUIRED_TABLES = frozenset({"sessions", "runs", "trace_events"})
+_REQUIRED_TABLES = _V1_REQUIRED_TABLES | {"checkpoints"}
+
+_V1_SCHEMA_STATEMENTS = (
     """
     CREATE TABLE sessions (
         session_id TEXT PRIMARY KEY,
@@ -74,6 +77,40 @@ _SCHEMA_STATEMENTS = (
     """,
 )
 
+_CHECKPOINT_SCHEMA_STATEMENTS = (
+    """
+    CREATE TABLE checkpoints (
+        checkpoint_id TEXT PRIMARY KEY,
+        session_id TEXT NOT NULL,
+        source_run_id TEXT NOT NULL,
+        trace_sequence INTEGER NOT NULL CHECK (trace_sequence >= 1),
+        trace_head_sha256 TEXT NOT NULL CHECK (length(trace_head_sha256) = 64),
+        format_version INTEGER NOT NULL CHECK (format_version = 1),
+        created_at TEXT NOT NULL,
+        payload_json TEXT NOT NULL,
+        payload_sha256 TEXT NOT NULL CHECK (length(payload_sha256) = 64),
+        status TEXT NOT NULL CHECK (status IN ('available', 'consumed')),
+        resumed_run_id TEXT,
+        consumed_at TEXT,
+        FOREIGN KEY (session_id) REFERENCES sessions(session_id),
+        FOREIGN KEY (session_id, source_run_id) REFERENCES runs(session_id, run_id),
+        FOREIGN KEY (session_id, resumed_run_id) REFERENCES runs(session_id, run_id),
+        UNIQUE (session_id, trace_sequence),
+        CHECK (
+            (status = 'available' AND resumed_run_id IS NULL AND consumed_at IS NULL)
+            OR
+            (status = 'consumed' AND resumed_run_id IS NOT NULL AND consumed_at IS NOT NULL)
+        )
+    )
+    """,
+    """
+    CREATE INDEX checkpoints_session_created_idx
+    ON checkpoints(session_id, created_at DESC, checkpoint_id ASC)
+    """,
+)
+
+_SCHEMA_STATEMENTS = _V1_SCHEMA_STATEMENTS + _CHECKPOINT_SCHEMA_STATEMENTS
+
 
 @contextmanager
 def connect_database(
@@ -125,13 +162,16 @@ def initialize_database(
         try:
             connection.execute("PRAGMA journal_mode = WAL")
             version = int(connection.execute("PRAGMA user_version").fetchone()[0])
-            if version not in (0, SCHEMA_VERSION):
+            if version not in (0, 1, DATABASE_SCHEMA_VERSION):
                 raise PersistenceError(
                     PersistenceErrorCode.UNSUPPORTED_SCHEMA,
                     "Session database schema is unsupported.",
                 )
             if version == 0:
                 _create_schema(connection)
+            elif version == 1:
+                _verify_required_tables(connection, _V1_REQUIRED_TABLES)
+                _migrate_v1_to_v2(connection)
             _verify_schema(connection)
         except PersistenceError:
             raise
@@ -147,7 +187,19 @@ def _create_schema(connection: sqlite3.Connection) -> None:
     try:
         for statement in _SCHEMA_STATEMENTS:
             connection.execute(statement)
-        connection.execute(f"PRAGMA user_version = {SCHEMA_VERSION}")
+        connection.execute(f"PRAGMA user_version = {DATABASE_SCHEMA_VERSION}")
+        connection.commit()
+    except Exception:
+        connection.rollback()
+        raise
+
+
+def _migrate_v1_to_v2(connection: sqlite3.Connection) -> None:
+    connection.execute("BEGIN IMMEDIATE")
+    try:
+        for statement in _CHECKPOINT_SCHEMA_STATEMENTS:
+            connection.execute(statement)
+        connection.execute(f"PRAGMA user_version = {DATABASE_SCHEMA_VERSION}")
         connection.commit()
     except Exception:
         connection.rollback()
@@ -155,9 +207,16 @@ def _create_schema(connection: sqlite3.Connection) -> None:
 
 
 def _verify_schema(connection: sqlite3.Connection) -> None:
+    _verify_required_tables(connection, _REQUIRED_TABLES)
+
+
+def _verify_required_tables(
+    connection: sqlite3.Connection,
+    required: frozenset[str],
+) -> None:
     rows = connection.execute("SELECT name FROM sqlite_master WHERE type = 'table'").fetchall()
     tables = {str(row["name"]) for row in rows}
-    if not _REQUIRED_TABLES.issubset(tables):
+    if not required.issubset(tables):
         raise PersistenceError(
             PersistenceErrorCode.STORAGE_FAILED,
             "Session database schema is invalid.",

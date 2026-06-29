@@ -14,7 +14,7 @@ from mini_code_agent.persistence.errors import (
 )
 from mini_code_agent.persistence.models import (
     EMPTY_TRACE_SHA256,
-    SCHEMA_VERSION,
+    TRACE_SCHEMA_VERSION,
     RunStatus,
     SessionRecord,
     SessionStatus,
@@ -101,7 +101,7 @@ class SessionEventJournal:
                     (
                         self._session_id,
                         sequence,
-                        SCHEMA_VERSION,
+                        TRACE_SCHEMA_VERSION,
                         event.run_id,
                         event.event_id,
                         event.type,

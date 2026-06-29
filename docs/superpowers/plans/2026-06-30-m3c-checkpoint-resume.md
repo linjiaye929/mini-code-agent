@@ -30,7 +30,7 @@ replaying uncheckpointed side effects.
 
 ## Task 3: SQLite Schema v2 Migration
 
-**Status:** Pending
+**Status:** Complete
 
 - Separate database schema version 2 from Trace envelope version 1.
 - Add transactional v1-to-v2 migration and fresh-v2 creation.

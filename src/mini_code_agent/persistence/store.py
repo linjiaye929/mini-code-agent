@@ -19,7 +19,7 @@ from mini_code_agent.persistence.journal import SessionEventJournal
 from mini_code_agent.persistence.models import (
     EMPTY_TRACE_SHA256,
     IDENTIFIER_PATTERN,
-    SCHEMA_VERSION,
+    TRACE_SCHEMA_VERSION,
     RunRecord,
     SessionRecord,
     SessionStatus,
@@ -95,7 +95,7 @@ class SqliteSessionTraceStore:
                     """,
                     (
                         identifier,
-                        SCHEMA_VERSION,
+                        TRACE_SCHEMA_VERSION,
                         now,
                         now,
                         SessionStatus.READY.value,
