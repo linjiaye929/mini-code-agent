@@ -3,10 +3,18 @@ from __future__ import annotations
 import json
 import re
 from collections.abc import AsyncIterator, Mapping
+from dataclasses import dataclass, field
 from typing import Final, Literal
 
 import httpx
-from pydantic import BaseModel, ConfigDict, Field, SecretStr, ValidationError
+from pydantic import (
+    BaseModel,
+    ConfigDict,
+    Field,
+    JsonValue,
+    SecretStr,
+    ValidationError,
+)
 
 from mini_code_agent.domain.content import TextBlock, ToolCall, ToolResult
 from mini_code_agent.domain.messages import Message, MessageRole
@@ -18,13 +26,24 @@ from mini_code_agent.providers.base import (
     ProviderError,
     ProviderErrorCode,
     ProviderStreamEvent,
+    ResponseCompleted,
+    TextDelta,
     TokenUsage,
+    ToolCallDelta,
 )
-from mini_code_agent.providers.http import ProviderHttpTransport, decode_json_object
+from mini_code_agent.providers.http import (
+    JsonObject,
+    ProviderHttpTransport,
+    decode_json_object,
+)
 
 _MODEL_PATTERN: Final = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._:/-]{0,255}$")
 _CAPABILITIES: Final = ProviderCapabilities(parallel_tool_calls=True)
 _PROTECTED_HEADERS: Final = frozenset({"authorization", "content-type"})
+
+
+def _empty_string_list() -> list[str]:
+    return []
 
 
 class _OpenAIFunction(BaseModel):
@@ -73,6 +92,14 @@ class _OpenAIResponse(BaseModel):
     usage: _OpenAIUsage | None = None
 
 
+@dataclass(slots=True)
+class _OpenAIToolStreamState:
+    index: int
+    tool_call_id: str
+    name: str
+    fragments: list[str] = field(default_factory=_empty_string_list)
+
+
 class OpenAICompatibleProvider:
     def __init__(
         self,
@@ -117,13 +144,28 @@ class OpenAICompatibleProvider:
         self,
         request: ModelRequest,
     ) -> AsyncIterator[ProviderStreamEvent]:
-        del request
-        raise ProviderError(
-            ProviderErrorCode.INVALID_RESPONSE,
-            "OpenAI-compatible streaming is not available.",
-            retryable=False,
-        )
-        yield
+        parser = _OpenAIStreamParser()
+        async with self._transport.stream_sse(
+            "chat/completions",
+            headers=self._headers(),
+            payload=self._request_payload(request, stream=True),
+        ) as connection:
+            async for event in connection.events:
+                try:
+                    normalized_events = parser.consume(event.data)
+                except ProviderError:
+                    raise
+                except (TypeError, ValueError, ValidationError):
+                    raise _invalid_openai_response() from None
+                for normalized in normalized_events:
+                    yield normalized
+            try:
+                response = parser.complete(request_id=connection.request_id)
+            except ProviderError:
+                raise
+            except (TypeError, ValueError, ValidationError):
+                raise _invalid_openai_response() from None
+        yield ResponseCompleted(response=response)
 
     async def aclose(self) -> None:
         await self._transport.aclose()
@@ -258,6 +300,172 @@ class OpenAICompatibleProvider:
             raise _invalid_openai_response() from None
 
 
+class _OpenAIStreamParser:
+    def __init__(self) -> None:
+        self._saw_chunk = False
+        self._done = False
+        self._finish_reason: FinishReason | None = None
+        self._text_fragments: list[str] = []
+        self._tools: dict[int, _OpenAIToolStreamState] = {}
+        self._tool_ids: set[str] = set()
+        self._usage = TokenUsage()
+
+    def consume(
+        self,
+        data: str,
+    ) -> tuple[TextDelta | ToolCallDelta, ...]:
+        if self._done:
+            raise ValueError("event received after [DONE]")
+        if data.strip() == "[DONE]":
+            if self._finish_reason is None:
+                raise ValueError("[DONE] received before finish reason")
+            self._done = True
+            return ()
+
+        payload = decode_json_object(data.encode("utf-8"))
+        if "error" in payload:
+            raise _stream_error(payload)
+        choices = payload.get("choices")
+        if not isinstance(choices, list):
+            raise ValueError("stream chunk choices must be an array")
+
+        usage_value = payload.get("usage")
+        if usage_value is not None:
+            self._usage = _parse_stream_usage(usage_value)
+
+        if not choices:
+            if usage_value is None or self._finish_reason is None:
+                raise ValueError("empty choices are valid only for final usage")
+            return ()
+        if len(choices) != 1 or not isinstance(choices[0], dict):
+            raise ValueError("stream chunk must contain exactly one choice")
+        if self._finish_reason is not None:
+            raise ValueError("choice received after finish reason")
+
+        choice = choices[0]
+        if _required_nonnegative_int(choice, "index") != 0:
+            raise ValueError("only choice index zero is supported")
+        delta = _required_object(choice, "delta")
+        role = delta.get("role")
+        if role is not None and role != "assistant":
+            raise ValueError("streamed role must be assistant")
+
+        normalized: list[TextDelta | ToolCallDelta] = []
+        content = delta.get("content")
+        if content is not None:
+            if not isinstance(content, str):
+                raise ValueError("streamed content must be text")
+            if content:
+                self._text_fragments.append(content)
+                normalized.append(TextDelta(text=content))
+
+        tool_calls = delta.get("tool_calls")
+        if tool_calls is not None:
+            if not isinstance(tool_calls, list):
+                raise ValueError("streamed tool_calls must be an array")
+            for wire_call in tool_calls:
+                if not isinstance(wire_call, dict):
+                    raise ValueError("streamed tool call must be an object")
+                tool_event = self._consume_tool_call(wire_call)
+                if tool_event is not None:
+                    normalized.append(tool_event)
+
+        finish_reason = choice.get("finish_reason")
+        if finish_reason is not None:
+            if not isinstance(finish_reason, str):
+                raise ValueError("finish_reason must be a string")
+            self._finish_reason = _map_finish_reason(finish_reason)
+
+        self._saw_chunk = True
+        return tuple(normalized)
+
+    def complete(self, *, request_id: str | None) -> ModelResponse:
+        if not self._saw_chunk or not self._done or self._finish_reason is None:
+            raise ValueError("stream ended before completion")
+        indexes = sorted(self._tools)
+        if indexes != list(range(len(indexes))):
+            raise ValueError("tool call indexes are not contiguous")
+
+        content: list[TextBlock | ToolCall] = []
+        text = "".join(self._text_fragments)
+        if text:
+            content.append(TextBlock(text=text))
+        for index in indexes:
+            state = self._tools[index]
+            arguments = decode_json_object(("".join(state.fragments) or "{}").encode("utf-8"))
+            content.append(
+                ToolCall(
+                    id=state.tool_call_id,
+                    name=state.name,
+                    arguments=arguments,
+                )
+            )
+
+        return ModelResponse(
+            message=Message(
+                role=MessageRole.ASSISTANT,
+                content=tuple(content),
+            ),
+            finish_reason=self._finish_reason,
+            usage=self._usage,
+            provider_request_id=request_id,
+        )
+
+    def _consume_tool_call(
+        self,
+        wire_call: JsonObject,
+    ) -> ToolCallDelta | None:
+        index = _required_nonnegative_int(wire_call, "index")
+        if index > 255:
+            raise ValueError("tool call index exceeds limit")
+        state = self._tools.get(index)
+        wire_id = wire_call.get("id")
+        wire_type = wire_call.get("type")
+        function = _required_object(wire_call, "function")
+        wire_name = function.get("name")
+
+        if state is None:
+            if len(self._tools) >= 256:
+                raise ValueError("too many tool calls")
+            if not isinstance(wire_id, str) or not 0 < len(wire_id) <= 128:
+                raise ValueError("first tool chunk requires a bounded id")
+            if wire_type != "function":
+                raise ValueError("first tool chunk must be a function")
+            if not isinstance(wire_name, str) or not 0 < len(wire_name) <= 64:
+                raise ValueError("first tool chunk requires a bounded name")
+            if wire_id in self._tool_ids:
+                raise ValueError("duplicate tool call id")
+            self._tool_ids.add(wire_id)
+            state = _OpenAIToolStreamState(
+                index=index,
+                tool_call_id=wire_id,
+                name=wire_name,
+            )
+            self._tools[index] = state
+        else:
+            if wire_id is not None and wire_id != state.tool_call_id:
+                raise ValueError("tool call id changed during streaming")
+            if wire_type is not None and wire_type != "function":
+                raise ValueError("tool call type changed during streaming")
+            if wire_name is not None and wire_name != state.name:
+                raise ValueError("tool call name changed during streaming")
+
+        arguments = function.get("arguments")
+        if arguments is None:
+            return None
+        if not isinstance(arguments, str):
+            raise ValueError("tool arguments fragment must be text")
+        if not arguments:
+            return None
+        state.fragments.append(arguments)
+        return ToolCallDelta(
+            index=index,
+            tool_call_id=state.tool_call_id,
+            name=state.name,
+            partial_json=arguments,
+        )
+
+
 def _validate_extra_headers(headers: Mapping[str, str]) -> dict[str, str]:
     if len(headers) > 32:
         raise ValueError("extra_headers cannot contain more than 32 entries")
@@ -305,6 +513,65 @@ def _map_finish_reason(value: str) -> FinishReason:
     if value == "content_filter":
         return FinishReason.CONTENT_FILTER
     raise ValueError("unsupported OpenAI-compatible finish reason")
+
+
+def _required_object(payload: JsonObject, key: str) -> JsonObject:
+    value = payload.get(key)
+    if not isinstance(value, dict):
+        raise ValueError(f"{key} must be an object")
+    return value
+
+
+def _required_nonnegative_int(payload: JsonObject, key: str) -> int:
+    value = payload.get(key)
+    if type(value) is not int or value < 0:
+        raise ValueError(f"{key} must be a non-negative integer")
+    return value
+
+
+def _parse_stream_usage(value: JsonValue) -> TokenUsage:
+    if not isinstance(value, dict):
+        raise ValueError("usage must be an object")
+    return TokenUsage(
+        input_tokens=_required_nonnegative_int(value, "prompt_tokens"),
+        output_tokens=_required_nonnegative_int(value, "completion_tokens"),
+    )
+
+
+def _stream_error(payload: JsonObject) -> ProviderError:
+    error = _required_object(payload, "error")
+    error_type = error.get("type") or error.get("code")
+    if not isinstance(error_type, str):
+        return _invalid_openai_response()
+    if error_type in {
+        "authentication_error",
+        "invalid_api_key",
+        "permission_error",
+    }:
+        return ProviderError(
+            ProviderErrorCode.AUTHENTICATION,
+            "OpenAI-compatible stream authentication failed.",
+            retryable=False,
+        )
+    if error_type in {"rate_limit_error", "rate_limit_exceeded"}:
+        return ProviderError(
+            ProviderErrorCode.RATE_LIMIT,
+            "OpenAI-compatible stream was rate limited.",
+            retryable=True,
+        )
+    if error_type in {"timeout", "timeout_error"}:
+        return ProviderError(
+            ProviderErrorCode.TIMEOUT,
+            "OpenAI-compatible stream timed out.",
+            retryable=True,
+        )
+    if error_type in {"server_error", "api_error", "overloaded_error"}:
+        return ProviderError(
+            ProviderErrorCode.SERVER,
+            "OpenAI-compatible stream failed temporarily.",
+            retryable=True,
+        )
+    return _invalid_openai_response()
 
 
 def _invalid_openai_response() -> ProviderError:
