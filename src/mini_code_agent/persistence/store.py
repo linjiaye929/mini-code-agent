@@ -395,9 +395,22 @@ class SqliteSessionTraceStore:
         *,
         resumed_run_id: str,
         max_turns: int,
+        compatibility: ResumeCompatibility,
+        policy: ResumePolicy | None = None,
     ) -> ResumeState:
         self._ensure_initialized()
         self._validate_identifier(resumed_run_id)
+        trusted_plan = self.analyze_resume(
+            plan.checkpoint.session_id,
+            plan.checkpoint.checkpoint_id,
+            compatibility=compatibility,
+            policy=policy,
+        )
+        if trusted_plan != plan:
+            raise PersistenceError(
+                PersistenceErrorCode.CHECKPOINT_STALE,
+                "Resume plan is stale.",
+            )
         checkpoint = plan.checkpoint
         timestamp = max(datetime.now(UTC), checkpoint.created_at)
         stopped = RunStopped(

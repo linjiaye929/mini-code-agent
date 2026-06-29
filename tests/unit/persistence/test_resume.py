@@ -286,7 +286,12 @@ def test_resume_claim_atomically_interrupts_source_and_starts_new_run(
         compatibility=compatibility(),
     )
 
-    state = store.claim_resume(plan, resumed_run_id="run-2", max_turns=8)
+    state = store.claim_resume(
+        plan,
+        resumed_run_id="run-2",
+        max_turns=8,
+        compatibility=compatibility(),
+    )
 
     source = store.get_run("session-1", "run-1")
     resumed = store.get_run("session-1", "run-2")
@@ -320,10 +325,53 @@ def test_resume_claim_rejects_stale_plan_without_mutation(tmp_path: Path) -> Non
     before = store.get_session("session-1")
 
     with pytest.raises(PersistenceError) as captured:
-        store.claim_resume(plan, resumed_run_id="run-2", max_turns=8)
+        store.claim_resume(
+            plan,
+            resumed_run_id="run-2",
+            max_turns=8,
+            compatibility=compatibility(),
+            policy=ResumePolicy(allow_model_retry=True),
+        )
 
     assert captured.value.code is PersistenceErrorCode.CHECKPOINT_STALE
     assert store.get_session("session-1") == before
+    assert store.get_run("session-1", "run-1").status is RunStatus.ACTIVE
+
+
+def test_resume_claim_cannot_use_fabricated_plan_to_bypass_risk_scan(
+    tmp_path: Path,
+) -> None:
+    store = active_store(tmp_path / "state.db")
+    saved = store.checkpoints("session-1").save(draft())
+    plan = store.analyze_resume(
+        "session-1",
+        saved.checkpoint_id,
+        compatibility=compatibility(),
+    )
+    store.journal("session-1").append(
+        ToolStarted(
+            run_id="run-1",
+            timestamp=saved.created_at + timedelta(milliseconds=1),
+            turn=2,
+            tool_call_id="write-2",
+            tool_name="write_file",
+            side_effect=SideEffect.WRITE,
+        )
+    )
+
+    with pytest.raises(PersistenceError) as captured:
+        store.claim_resume(
+            plan,
+            resumed_run_id="run-2",
+            max_turns=8,
+            compatibility=compatibility(),
+            policy=ResumePolicy(
+                allow_model_retry=True,
+                allow_read_only_retry=True,
+            ),
+        )
+
+    assert captured.value.code is PersistenceErrorCode.INDETERMINATE_SIDE_EFFECT
     assert store.get_run("session-1", "run-1").status is RunStatus.ACTIVE
 
 
@@ -347,7 +395,12 @@ def test_resume_claim_rolls_back_both_events_when_consumption_fails(
         )
 
     with pytest.raises(PersistenceError) as captured:
-        store.claim_resume(plan, resumed_run_id="run-2", max_turns=8)
+        store.claim_resume(
+            plan,
+            resumed_run_id="run-2",
+            max_turns=8,
+            compatibility=compatibility(),
+        )
 
     assert captured.value.code is PersistenceErrorCode.STORAGE_FAILED
     assert store.get_session("session-1").event_count == plan.analyzed_event_count
@@ -372,6 +425,7 @@ def test_concurrent_resume_claim_has_exactly_one_winner(tmp_path: Path) -> None:
                 plan,
                 resumed_run_id=run_id,
                 max_turns=8,
+                compatibility=compatibility(),
             ).resumed_run_id
         except PersistenceError as exc:
             return exc.code.value

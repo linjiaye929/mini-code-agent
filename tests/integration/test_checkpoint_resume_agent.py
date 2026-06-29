@@ -105,6 +105,11 @@ async def test_reopen_claim_and_resume_after_provider_process_crash(
             plan,
             resumed_run_id="run-2",
             max_turns=8,
+            compatibility=ResumeCompatibility(
+                tool_contract_sha256=tool_contract_sha256(tools.definitions),
+                workspace_sha256=workspace_state.current_sha256(),
+            ),
+            policy=ResumePolicy(allow_model_retry=True),
         )
         provider = ScriptedProvider([final_response()])
         result = await AgentRuntime(
