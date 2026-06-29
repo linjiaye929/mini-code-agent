@@ -1,7 +1,7 @@
 import pytest
 from pydantic import ValidationError
 
-from mini_code_agent.agent.events import RecordingEventSink, RunStarted
+from mini_code_agent.agent.events import ContextCompacted, RecordingEventSink, RunStarted
 from mini_code_agent.agent.models import AgentLimits, AgentResult, StopReason
 from mini_code_agent.domain.messages import Message
 from mini_code_agent.providers.base import TokenUsage
@@ -34,3 +34,53 @@ def test_agent_result_success_depends_on_stop_reason() -> None:
     )
 
     assert result.succeeded is True
+
+
+def test_context_compacted_is_typed_bounded_and_recordable() -> None:
+    sink = RecordingEventSink()
+    event = ContextCompacted(
+        run_id="run-1",
+        turn=3,
+        estimated_before=10_000,
+        estimated_after=8_000,
+        omitted_messages=4,
+        omitted_tool_exchanges=2,
+        transcript_sha256="a" * 64,
+    )
+
+    sink.publish(event)
+
+    assert sink.events == [event]
+    assert event.type == "context_compacted"
+    assert "omitted content" not in event.model_dump_json()
+    with pytest.raises(ValidationError):
+        event.omitted_messages = 5  # type: ignore[misc]
+
+
+@pytest.mark.parametrize(
+    "values",
+    [
+        {"turn": 0},
+        {"estimated_before": -1},
+        {"estimated_before": 10, "estimated_after": 11},
+        {"omitted_messages": 0},
+        {"omitted_messages": 1, "omitted_tool_exchanges": 1},
+        {"transcript_sha256": "invalid"},
+    ],
+)
+def test_context_compacted_rejects_inconsistent_metadata(
+    values: dict[str, object],
+) -> None:
+    complete: dict[str, object] = {
+        "run_id": "run-1",
+        "turn": 1,
+        "estimated_before": 10,
+        "estimated_after": 5,
+        "omitted_messages": 2,
+        "omitted_tool_exchanges": 1,
+        "transcript_sha256": "0" * 64,
+    }
+    complete.update(values)
+
+    with pytest.raises(ValidationError):
+        ContextCompacted.model_validate(complete)

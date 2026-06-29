@@ -1,9 +1,9 @@
 from __future__ import annotations
 
 from datetime import UTC, datetime
-from typing import Literal, Protocol
+from typing import Literal, Protocol, Self
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 from mini_code_agent.agent.models import StopReason
 from mini_code_agent.providers.base import FinishReason, TokenUsage
@@ -36,6 +36,25 @@ class ToolCompleted(EventBase):
     is_error: bool
 
 
+class ContextCompacted(EventBase):
+    type: Literal["context_compacted"] = "context_compacted"
+    turn: int = Field(ge=1)
+    estimated_before: int = Field(ge=0, le=2_000_000_000)
+    estimated_after: int = Field(ge=0, le=2_000_000_000)
+    omitted_messages: int = Field(ge=1)
+    omitted_tool_exchanges: int = Field(ge=0)
+    transcript_sha256: str = Field(pattern=r"^[0-9a-f]{64}$")
+
+    @model_validator(mode="after")
+    def validate_compaction_metadata(self) -> Self:
+        if (
+            self.estimated_after > self.estimated_before
+            or self.omitted_tool_exchanges * 2 > self.omitted_messages
+        ):
+            raise ValueError("context compaction metadata is inconsistent")
+        return self
+
+
 class RunStopped(EventBase):
     type: Literal["run_stopped"] = "run_stopped"
     turns: int
@@ -43,7 +62,7 @@ class RunStopped(EventBase):
     error: str | None = None
 
 
-AgentEvent = RunStarted | ModelCompleted | ToolCompleted | RunStopped
+AgentEvent = RunStarted | ModelCompleted | ToolCompleted | ContextCompacted | RunStopped
 
 
 class EventSink(Protocol):
