@@ -180,6 +180,7 @@ async def test_ask_dispatches_only_after_explicit_approval(approved: bool) -> No
     assert len(approval.requests) == 1
     request = approval.requests[0]
     assert request.preview.resources == ("src/app.py",)
+    assert request.preview.command is None
     assert request.preview.diff == "--- before\n+++ after\n"
     assert request.rule_id == "default-write"
     assert bool(tool.calls) is approved

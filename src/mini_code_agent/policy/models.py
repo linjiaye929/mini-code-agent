@@ -8,6 +8,7 @@ from pydantic import BaseModel, ConfigDict, Field
 from mini_code_agent.tools.base import SideEffect
 
 type ResourcePath = Annotated[str, Field(min_length=1, max_length=1024)]
+type CommandArgument = Annotated[str, Field(max_length=4096)]
 
 
 class PolicyDecision(StrEnum):
@@ -78,6 +79,7 @@ class ActionPreview(BaseModel):
     summary: str = Field(min_length=1, max_length=500)
     reason: str = Field(default="No reason provided.", min_length=1, max_length=500)
     resources: tuple[ResourcePath, ...] = Field(default=(), max_length=32)
+    command: tuple[CommandArgument, ...] | None = Field(default=None, max_length=64)
     diff: str | None = Field(default=None, max_length=32_768)
 
 
