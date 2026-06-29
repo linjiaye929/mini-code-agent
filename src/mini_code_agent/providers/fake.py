@@ -1,10 +1,11 @@
 from __future__ import annotations
 
 import asyncio
+import json
 from collections import deque
 from collections.abc import AsyncIterator, Iterable
 
-from mini_code_agent.domain.content import TextBlock
+from mini_code_agent.domain.content import TextBlock, ToolCall
 from mini_code_agent.providers.base import (
     ModelRequest,
     ModelResponse,
@@ -14,6 +15,7 @@ from mini_code_agent.providers.base import (
     ProviderStreamEvent,
     ResponseCompleted,
     TextDelta,
+    ToolCallDelta,
 )
 
 
@@ -53,7 +55,20 @@ class ScriptedProvider:
         request: ModelRequest,
     ) -> AsyncIterator[ProviderStreamEvent]:
         response = await self.complete(request)
-        for block in response.message.content:
+        for index, block in enumerate(response.message.content):
             if isinstance(block, TextBlock):
                 yield TextDelta(text=block.text)
+            elif isinstance(block, ToolCall):
+                arguments = block.model_dump(mode="json")["arguments"]
+                yield ToolCallDelta(
+                    index=index,
+                    tool_call_id=block.id,
+                    name=block.name,
+                    partial_json=json.dumps(
+                        arguments,
+                        ensure_ascii=True,
+                        separators=(",", ":"),
+                        sort_keys=True,
+                    ),
+                )
         yield ResponseCompleted(response=response)

@@ -2,9 +2,12 @@ from __future__ import annotations
 
 import asyncio
 import json
+import re
+from typing import cast
 from uuid import uuid4
 
 from mini_code_agent.agent.events import (
+    AgentEvent,
     EventSink,
     ModelCompleted,
     NullEventSink,
@@ -19,10 +22,11 @@ from mini_code_agent.providers.base import (
     FinishReason,
     ModelProvider,
     ModelRequest,
+    ModelResponse,
     ProviderError,
     TokenUsage,
 )
-from mini_code_agent.tools.base import ToolExecutor
+from mini_code_agent.tools.base import SideEffect, ToolExecutor
 
 
 class AgentRuntime:
@@ -38,6 +42,14 @@ class AgentRuntime:
         self._tools = tools
         self._limits = limits or AgentLimits()
         self._events = events or NullEventSink()
+        definitions = tools.definitions
+        names = tuple(definition.name for definition in definitions)
+        if len(set(names)) != len(names):
+            raise ValueError("Tool definitions must have unique names.")
+        if any(definition.side_effect is not SideEffect.READ_ONLY for definition in definitions):
+            raise ValueError("M1 only permits read-only tools.")
+        self._definitions = definitions
+        self._tool_names = frozenset(names)
 
     async def run(
         self,
@@ -46,25 +58,28 @@ class AgentRuntime:
         system_prompt: str = "",
         run_id: str | None = None,
     ) -> AgentResult:
-        active_run_id = run_id or str(uuid4())
+        active_run_id = self._validate_run_id(run_id or str(uuid4()))
         messages = [Message.user_text(user_prompt)]
         usage = TokenUsage()
         seen_call_ids: set[str] = set()
         tool_call_count = 0
-        self._events.publish(RunStarted(run_id=active_run_id, max_turns=self._limits.max_turns))
+        self._publish(RunStarted(run_id=active_run_id, max_turns=self._limits.max_turns))
 
         for turn in range(1, self._limits.max_turns + 1):
             request = ModelRequest(
                 request_id=f"{active_run_id}:{turn}",
                 system_prompt=system_prompt,
                 messages=tuple(messages),
-                tools=self._tools.definitions,
+                tools=self._definitions,
             )
             try:
                 async with asyncio.timeout(self._limits.provider_timeout_seconds):
-                    response = await self._provider.complete(request)
+                    response_candidate = cast(
+                        object,
+                        await self._provider.complete(request),
+                    )
             except asyncio.CancelledError:
-                self._events.publish(
+                self._publish(
                     RunStopped(
                         run_id=active_run_id,
                         turns=turn - 1,
@@ -103,12 +118,24 @@ class AgentRuntime:
                     "Provider request failed unexpectedly.",
                 )
 
+            if not isinstance(response_candidate, ModelResponse):
+                return self._stop(
+                    active_run_id,
+                    messages,
+                    StopReason.INVALID_RESPONSE,
+                    turn - 1,
+                    tool_call_count,
+                    usage,
+                    "Provider returned an invalid response.",
+                )
+            response = response_candidate
+
             messages.append(response.message)
             usage = TokenUsage(
                 input_tokens=usage.input_tokens + response.usage.input_tokens,
                 output_tokens=usage.output_tokens + response.usage.output_tokens,
             )
-            self._events.publish(
+            self._publish(
                 ModelCompleted(
                     run_id=active_run_id,
                     turn=turn,
@@ -139,33 +166,46 @@ class AgentRuntime:
                     "Provider stopped before completing the response.",
                 )
 
+            calls = response.message.tool_calls
+            call_ids = tuple(call.id for call in calls)
+            if len(set(call_ids)) != len(call_ids) or seen_call_ids.intersection(call_ids):
+                return self._stop(
+                    active_run_id,
+                    messages,
+                    StopReason.DUPLICATE_TOOL_CALL,
+                    turn,
+                    tool_call_count,
+                    usage,
+                    "Provider repeated a ToolCall identifier.",
+                )
+            if tool_call_count + len(calls) > self._limits.max_tool_calls:
+                return self._stop(
+                    active_run_id,
+                    messages,
+                    StopReason.MAX_TOOL_CALLS,
+                    turn,
+                    tool_call_count,
+                    usage,
+                    "Agent reached the ToolCall limit.",
+                )
+
+            seen_call_ids.update(call_ids)
             tool_results: list[ToolResult] = []
-            for call in response.message.tool_calls:
-                if call.id in seen_call_ids:
-                    return self._stop(
-                        active_run_id,
-                        messages,
-                        StopReason.DUPLICATE_TOOL_CALL,
-                        turn,
-                        tool_call_count,
-                        usage,
-                        "Provider repeated a ToolCall identifier.",
-                    )
-                if tool_call_count >= self._limits.max_tool_calls:
-                    return self._stop(
-                        active_run_id,
-                        messages,
-                        StopReason.MAX_TOOL_CALLS,
-                        turn,
-                        tool_call_count,
-                        usage,
-                        "Agent reached the ToolCall limit.",
-                    )
-                seen_call_ids.add(call.id)
+            for call in calls:
                 tool_call_count += 1
-                result = await self._execute_tool(call)
+                try:
+                    result = await self._execute_tool(call)
+                except asyncio.CancelledError:
+                    self._publish(
+                        RunStopped(
+                            run_id=active_run_id,
+                            turns=turn,
+                            reason=StopReason.CANCELLED,
+                        )
+                    )
+                    raise
                 tool_results.append(result)
-                self._events.publish(
+                self._publish(
                     ToolCompleted(
                         run_id=active_run_id,
                         turn=turn,
@@ -187,9 +227,18 @@ class AgentRuntime:
         )
 
     async def _execute_tool(self, call: ToolCall) -> ToolResult:
+        if call.name not in self._tool_names:
+            return self._tool_error(
+                call.id,
+                "unknown_tool",
+                "The requested tool is not registered.",
+            )
         try:
             async with asyncio.timeout(self._limits.tool_timeout_seconds):
-                result = await self._tools.execute(call)
+                result_candidate = cast(
+                    object,
+                    await self._tools.execute(call),
+                )
         except TimeoutError:
             return self._tool_error(
                 call.id,
@@ -202,6 +251,13 @@ class AgentRuntime:
                 "tool_failed",
                 "Tool execution failed.",
             )
+        if not isinstance(result_candidate, ToolResult):
+            return self._tool_error(
+                call.id,
+                "invalid_tool_result",
+                "Tool returned an invalid result.",
+            )
+        result = result_candidate
         if result.tool_call_id != call.id:
             return self._tool_error(
                 call.id,
@@ -231,7 +287,7 @@ class AgentRuntime:
         *,
         final_text: str | None = None,
     ) -> AgentResult:
-        self._events.publish(
+        self._publish(
             RunStopped(
                 run_id=run_id,
                 turns=turns,
@@ -249,3 +305,17 @@ class AgentRuntime:
             final_text=final_text,
             error=error,
         )
+
+    def _publish(self, event: AgentEvent) -> None:
+        try:
+            self._events.publish(event)
+        except Exception:
+            return
+
+    @staticmethod
+    def _validate_run_id(run_id: str) -> str:
+        if re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9._-]{0,95}", run_id) is None:
+            raise ValueError(
+                "run_id must be 1-96 ASCII letters, digits, dots, underscores, or hyphens."
+            )
+        return run_id

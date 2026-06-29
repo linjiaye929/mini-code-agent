@@ -1,3 +1,6 @@
+from collections.abc import Mapping
+from typing import cast
+
 import pytest
 from pydantic import ValidationError
 
@@ -51,3 +54,24 @@ def test_role_invariants_reject_tool_results_from_assistant() -> None:
             role=MessageRole.ASSISTANT,
             content=(ToolResult(tool_call_id="call-1", content="ok"),),
         )
+
+
+def test_tool_call_arguments_are_recursively_immutable() -> None:
+    call = ToolCall(
+        id="call-1",
+        name="runtime_info",
+        arguments={"nested": {"items": ["one"]}},
+    )
+
+    with pytest.raises(TypeError):
+        cast(dict[str, object], call.arguments)["new"] = "value"
+
+    nested = call.arguments["nested"]
+    assert isinstance(nested, Mapping)
+    with pytest.raises(TypeError):
+        cast(dict[str, object], nested)["new"] = "value"
+
+    items = nested["items"]
+    assert isinstance(items, tuple)
+    assert call.model_dump()["arguments"] == {"nested": {"items": ["one"]}}
+    assert ToolCall.model_validate_json(call.model_dump_json()) == call

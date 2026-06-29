@@ -1,4 +1,5 @@
 import json
+from typing import cast
 
 import pytest
 
@@ -15,13 +16,21 @@ def test_runtime_info_is_declared_read_only() -> None:
     assert tool.definitions[0].side_effect is SideEffect.READ_ONLY
 
 
+def test_runtime_info_schema_cannot_be_mutated_globally() -> None:
+    tool = RuntimeInfoTool()
+    schema = tool.definitions[0].input_schema
+
+    with pytest.raises(TypeError):
+        cast(dict[str, object], schema)["additionalProperties"] = True
+
+    assert RuntimeInfoTool().definitions[0].input_schema["additionalProperties"] is False
+
+
 @pytest.mark.asyncio
 async def test_runtime_info_returns_safe_structured_data() -> None:
     tool = RuntimeInfoTool()
 
-    result = await tool.execute(
-        ToolCall(id="call-1", name="runtime_info", arguments={})
-    )
+    result = await tool.execute(ToolCall(id="call-1", name="runtime_info", arguments={}))
 
     payload = json.loads(result.content)
     assert result.tool_call_id == "call-1"
@@ -35,9 +44,7 @@ async def test_runtime_info_returns_safe_structured_data() -> None:
 async def test_runtime_info_rejects_unknown_tool_without_raising() -> None:
     tool = RuntimeInfoTool()
 
-    result = await tool.execute(
-        ToolCall(id="call-2", name="unknown_tool", arguments={})
-    )
+    result = await tool.execute(ToolCall(id="call-2", name="unknown_tool", arguments={}))
 
     assert result.is_error is True
     assert json.loads(result.content)["error"]["code"] == "unknown_tool"

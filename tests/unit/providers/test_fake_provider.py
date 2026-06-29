@@ -12,6 +12,7 @@ from mini_code_agent.providers.base import (
     ResponseCompleted,
     TextDelta,
     TokenUsage,
+    ToolCallDelta,
 )
 from mini_code_agent.providers.fake import ScriptedProvider
 
@@ -101,9 +102,40 @@ def test_response_rejects_tool_call_with_stop_reason() -> None:
         ModelResponse(
             message=Message(
                 role=MessageRole.ASSISTANT,
-                content=(
-                    ToolCall(id="call-1", name="runtime_info", arguments={}),
-                ),
+                content=(ToolCall(id="call-1", name="runtime_info", arguments={}),),
             ),
             finish_reason=FinishReason.STOP,
         )
+
+
+@pytest.mark.asyncio
+async def test_stream_emits_tool_call_metadata_before_completion() -> None:
+    tool_call_response = ModelResponse(
+        message=Message(
+            role=MessageRole.ASSISTANT,
+            content=(
+                ToolCall(
+                    id="call-1",
+                    name="runtime_info",
+                    arguments={},
+                ),
+            ),
+        ),
+        finish_reason=FinishReason.TOOL_CALL,
+    )
+    provider = ScriptedProvider([tool_call_response])
+    request = ModelRequest(
+        request_id="request-1",
+        system_prompt="",
+        messages=(Message.user_text("work"),),
+    )
+
+    events = [event async for event in provider.stream(request)]
+
+    assert events[0] == ToolCallDelta(
+        index=0,
+        tool_call_id="call-1",
+        name="runtime_info",
+        partial_json="{}",
+    )
+    assert events[1] == ResponseCompleted(response=tool_call_response)

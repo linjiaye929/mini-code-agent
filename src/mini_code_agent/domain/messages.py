@@ -46,9 +46,7 @@ class Message(BaseModel):
 
     @property
     def text(self) -> str:
-        return "".join(
-            block.text for block in self.content if isinstance(block, TextBlock)
-        )
+        return "".join(block.text for block in self.content if isinstance(block, TextBlock))
 
     @classmethod
     def user_text(cls, text: str) -> Self:

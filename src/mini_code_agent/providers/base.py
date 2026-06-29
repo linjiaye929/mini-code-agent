@@ -73,6 +73,8 @@ class ToolCallDelta(BaseModel):
 
     type: Literal["tool_call_delta"] = "tool_call_delta"
     index: int = Field(ge=0)
+    tool_call_id: str = Field(min_length=1, max_length=128)
+    name: str = Field(pattern=r"^[a-z][a-z0-9_]{0,63}$")
     partial_json: str
 
 
