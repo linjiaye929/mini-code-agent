@@ -68,8 +68,8 @@ JSON Schema Draft 2020-12、Pytest、pytest-asyncio、Coverage、Ruff 与 Pyrigh
 | Provider-neutral Adapter | 单一供应商会带来协议、能力和成本锁定 | `Protocol`、递归不可变 Message/ToolCall、Anthropic/OpenAI 防腐层、capability、usage 与错误归一化 | 同一 Agent Runtime 无分支切换两种 wire protocol，并完成 ToolCall 往返 | 隔离 content block、role、tool arguments 和 finish reason 差异，避免厂商类型侵入 Core | 124 项 Provider/HTTP/跨适配器测试通过；两种 mock wire 闭环通过 |
 | 流式 ToolCall 状态机 | SSE 中参数是不完整 JSON，且并行调用会交错，直接解析或执行会产生错误调用 | 异步生成器、Anthropic block lifecycle、OpenAI per-index state、稀疏元数据缓存、终止后 JSON 校验 | 实时输出 text/tool delta，并在完整 lifecycle 后生成唯一 `ResponseCompleted` | 解决分片归属、ID/name 丢失、参数截断、终止事件缺失和错误完成问题 | 覆盖交错双工具、非法 JSON、索引缺口、元数据变化、缺失终止与流内错误 |
 | 安全 Provider HTTP 边界 | 模型响应和错误体不可信，可能泄密或造成内存/连接失控 | HTTPX async context、SSE parser、超时、16 MiB 硬上限、URL/header 校验、client ownership、静态公开错误 | 对同步/流响应统一限制、清理、分类和脱敏 | 防止原始 body/key/exception 泄漏、无界响应、endpoint 替换和 client 泄漏 | HTTP 状态、超限、非 JSON、错误 Content-Type、网络失败和密钥泄漏负向测试 |
-| 强类型 Tool Registry | 模型参数和动态工具容易产生类型漂移、异常泄漏与错误关联 | Draft 2020-12 Schema、单次 definition snapshot、`Protocol`、统一 Result/Error、结果上限 | 构造时验证 Schema，执行前校验参数，按名称分发并验证返回 ID/类型/大小 | 阻断非法参数进入执行器，防止动态定义漂移、异常泄漏和无界结果 | 重复名、坏 Schema、非法参数、异常、ID/类型/大小负向测试及 Agent 集成通过 |
-| 安全 Workspace | Agent 文件权限过大可能读取仓库外文件或平台特殊路径 | 词法白名单、`resolve(strict=True)`、`relative_to`、symlink/junction 与 `stat/fstat`、文件/遍历预算 | 将模型路径解析、文件类型、大小、编码和目录遍历统一限制在根目录 | 防止 `../`、绝对/盘符/UNC、ADS/设备名、`.git`、链接逃逸和资源耗尽 | Windows 特殊路径、大小/编码/二进制、遍历预算与路径脱敏测试通过；Linux symlink CI 待验证 |
+| 强类型 Tool Registry | 模型参数和动态工具容易产生类型漂移、异常泄漏与错误关联 | Draft 2020-12 Schema、单次 definition snapshot、`Protocol`、统一 Result/Error、结果上限 | 构造时验证 Schema，执行前校验参数，按名称分发并验证返回 ID/类型/大小 | 阻断非法参数进入执行器，防止动态定义漂移、异常泄漏和无界结果 | M2a 99 项专项测试覆盖 Registry/Workspace/Read/Search/Agent 集成；1 项 symlink 权限跳过 |
+| 安全 Workspace | Agent 文件权限过大可能读取仓库外文件或平台特殊路径 | 词法白名单、`resolve(strict=True)`、`relative_to`、symlink/junction 与 `stat/fstat`、文件/遍历预算 | 将模型路径解析、文件类型、大小、编码和目录遍历统一限制在根目录 | 防止 `../`、绝对/盘符/UNC、ADS/设备名、`.git`、链接逃逸和资源耗尽 | M2a 99 项专项测试通过；Linux symlink CI 待验证 |
 | 受限 Read/Search | 直接把仓库全文送入模型成本高，模型正则和大文件会造成不可控计算 | 保留换行的行窗口读取、literal search、确定性排序、Unicode casefold 位置映射、结果/preview 上限 | 按相对路径读取代码并返回 path/line/column/preview | 降低无效上下文，避免 ReDoS、错误 Unicode 列号和超大工具输出 | Read/Search 单测与“Read → Search → Final”三轮 Agent 集成通过 |
 | 权限决策系统 | 文件写入、命令和网络操作具有不同风险 | Policy Engine、风险分级、规则匹配、交互审批、默认拒绝 | 按工具、参数、路径决定 allow/ask/deny | 保留人在回路，控制真实副作用 | Policy matrix、审批 Trace、安全回归测试 |
 | 跨平台 Edit/Shell | Windows/Linux 的 shell、路径、编码和信号行为不同 | `subprocess`、Shell Adapter、UTF-8、超时、取消、输出截断 | 可靠编辑文件并执行受控开发命令 | 避免进程失控、日志爆量和平台漂移 | Windows/Linux CI、超时终止测试 |
@@ -77,7 +77,7 @@ JSON Schema Draft 2020-12、Pytest、pytest-asyncio、Coverage、Ruff 与 Pyrigh
 | Checkpoint/Resume | 网络错误、进程退出和人工中断不应导致全部重跑 | SQLite、版本化 Schema、原子快照、幂等恢复 | 保存会话状态并从中断点继续 | 提高长任务容错和问题复现能力 | 故障注入场景、恢复成功率和耗时待回填 |
 | 结构化 Trace | 文本日志无法回答 Agent 为什么执行某动作 | 类型化事件、correlation ID、耗时、usage、JSONL、脱敏 | 记录模型、工具、权限、压缩、恢复和错误事件 | 支持调试、审计、成本分析和行为评估 | Trace Schema 覆盖、解析测试、脱敏测试 |
 | Git/test/repair loop | 文件写完不等于任务完成 | Git status/diff、测试发现、诊断解析、有限重试 | 修改后运行验证，将失败反馈给 Agent 修复 | 建立修改、验证、修复、再验证闭环 | 首次通过率、修复后通过率、平均修复轮次 |
-| 质量门禁 | 企业级项目需要稳定接口和回归保护 | Ruff、严格 Pyright、Pytest、85% 核心覆盖率门槛、哈希构建约束、CI、SemVer | 自动执行 lint、类型检查、测试、构建和安装验证 | 防止低质量变更进入发布版本 | Python 3.12/3.13 各 191 通过、1 项 symlink 权限跳过；89.91% 分支覆盖率；四组构建安装 smoke 通过；远程 CI 待验证 |
+| 质量门禁 | 企业级项目需要稳定接口和回归保护 | Ruff、严格 Pyright、Pytest、85% 核心覆盖率门槛、哈希构建约束、CI、SemVer | 自动执行 lint、类型检查、测试、构建和安装验证 | 防止低质量变更进入发布版本 | Python 3.12/3.13 各 290 通过、2 项 symlink 权限跳过；90.33% 分支覆盖率；四组构建安装 smoke 通过；远程 CI 待验证 |
 | 可扩展 Harness | Skills、Hooks、MCP、Subagent 会增加控制流复杂度 | 稳定 Protocol、EventBus、能力声明、依赖倒置 | 在不侵入 Agent Core 的前提下增加能力 | 避免扩展绕过权限、Trace 和 Session | 插件合约测试；扩展数量后续回填 |
 
 ## 6. 指标回填规则
@@ -152,9 +152,13 @@ JSON Schema Draft 2020-12、Pytest、pytest-asyncio、Coverage、Ruff 与 Pyrigh
   和 JSON 校验通过后才生成 `ResponseCompleted`。
 - 构建安全 Provider HTTP 边界，通过超时、响应大小上限、URL/header 校验、client
   ownership 与静态公开错误防止泄密、无界响应和资源泄漏。
+- 构建 Draft 2020-12 Tool Registry 与跨平台 WorkspaceBoundary，在执行前拦截非法参数、
+  路径逃逸、Windows 特殊路径、链接、特殊/超大/二进制文件及遍历预算超限。
+- 实现保留原始换行的 `read_file` 和 Unicode 列号正确的 literal `search_text`，通过
+  `asyncio.to_thread` 避免有界磁盘 I/O 阻塞 Agent 事件循环。
 - 完成 Mini CodeAgent M0 工程基础：显式配置优先级、Pydantic 强类型边界、密钥安全 JSON 日志与 `doctor` 诊断 CLI。
 - 建立 Ruff、严格 Pyright、Pytest 覆盖率门槛和哈希约束构建，Python 3.12/3.13
-  各 191 项通过、1 项因 Windows symlink 权限跳过，分支覆盖率 89.91%。
+  各 290 项通过、2 项因 Windows symlink 权限跳过，分支覆盖率 90.33%。
 - wheel 与 sdist 在 Python 3.12/3.13 的四组隔离环境中通过真实 console-script smoke；
   Bandit 无发现，pip-audit 未发现已知依赖漏洞。
 - 对 wheel 与 sdist 分别执行隔离安装和真实 console-script smoke，并通过 `py.typed` 发布内联类型信息。

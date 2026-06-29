@@ -4,6 +4,27 @@ All notable changes follow Keep a Changelog. Versions follow Semantic Versioning
 
 ## [Unreleased]
 
+## [0.4.0-alpha.0] - 2026-06-29
+
+### Added
+
+- Cross-platform read-only WorkspaceBoundary with path, link, file type, size, binary, encoding,
+  and deterministic traversal policies.
+- Draft 2020-12 schema-validating Tool Registry with definition snapshots, correlated failures,
+  and global ToolResult limits.
+- Bounded `read_file` line windows and deterministic literal `search_text` with Unicode-aware
+  columns.
+- End-to-end Read/Search ToolCall integration through the unchanged Agent Runtime.
+
+### Security
+
+- Rejected traversal, absolute/drive/UNC, ADS, Windows device, trailing-dot/space, `.git`,
+  symlink/junction, and special-file paths.
+- Bounded file bytes, traversal files/bytes/depth, search results/line/preview, and registry
+  output.
+- Normalized workspace and executor failures without absolute paths, content, arguments, or raw
+  exceptions.
+
 ## [0.3.0-alpha.0] - 2026-06-29
 
 ### Added

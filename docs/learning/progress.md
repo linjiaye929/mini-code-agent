@@ -176,11 +176,19 @@
 4. Trace a file growing from exactly the limit to limit-plus-one during read.
 5. Explain why `Straße NEEDLE`.casefold() changes offsets and how the position map repairs them.
 
-## M2a Interim Verification
+## M2a Local Verification
 
-- Workspace safety, Tool Registry, Read/Search unit tests and unchanged Agent Runtime integration
-  are implemented locally.
-- First full repository gate after implementation: 272 passed, 2 skipped on Windows because
-  symlink creation is unavailable; branch coverage 90.11%.
-- Final cross-version, security, build, and release evidence will replace this interim result
-  after adversarial fixes and the `0.4.0a0` release gate.
+- M2a-focused suite: 99 passed; 1 symlink test skipped because this Windows account cannot create
+  symlinks.
+- Full repository on Python 3.12.13 and 3.13.14: 290 passed per interpreter; 2 Windows symlink
+  tests skipped per interpreter.
+- Python 3.13 branch-aware package coverage: 90.33%, above the configured 85% gate.
+- Ruff format/check and strict Pyright: passed.
+- Bandit source scan: no findings. pip-audit: no known vulnerabilities; the unpublished local
+  package itself was skipped because it is not on PyPI.
+- Hashed build produced `mini_code_agent-0.4.0a0-py3-none-any.whl` and
+  `mini_code_agent-0.4.0a0.tar.gz`.
+- Wheel and sdist each passed isolated installed console-script smoke tests on Python 3.12 and
+  3.13.
+- Package version: `0.4.0a0`; local milestone tag target: `v0.4.0-alpha.0`.
+- Linux symlink behavior still requires remote CI evidence; no remote result is claimed.
