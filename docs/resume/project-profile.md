@@ -1,14 +1,14 @@
 # Mini CodeAgent 简历项目包
 
-> 项目状态：设计完成，待实现。
+> 项目状态：M0 工程基础已在本地完成；Agent 核心能力按里程碑继续实现。
 >
 > 本文中的功能、性能和指标是目标或验收方案。只有得到代码、测试、CI、Benchmark 或 Release 证据后，才能改写为已完成成果。
 
 ## 1. 30 秒项目介绍
 
-从零设计并实现一个面向真实软件工程任务的企业级 Python Mini CodeAgent。项目采用 Framework-light Agent Harness，通过统一 Provider 协议兼容 Anthropic 与 OpenAI-compatible 模型，以跨平台 CLI 作为主要交互入口。
+正在从零设计并实现一个面向真实软件工程任务的企业级 Python Mini CodeAgent。项目采用 Framework-light Agent Harness，计划通过统一 Provider 协议兼容 Anthropic 与 OpenAI-compatible 模型，以跨平台 CLI 作为主要交互入口。当前已完成可复现 Python 工程骨架、强类型配置、密钥安全日志、诊断 CLI、哈希约束构建与本地质量门禁。
 
-核心能力包括可解释 Agent Loop、强类型 Tool Registry、安全 Workspace、allow/ask/deny 权限决策、文件编辑与 Shell 工具、Context Budget 与压缩、Session/Checkpoint/Resume、结构化 Trace，以及 Git、测试、诊断、修复闭环。工程侧通过严格类型、自动化测试、Windows/Linux CI、安全模型和 SemVer 发布流程保证可维护性，并为 Skills、Hooks、MCP、Subagent 与 Worktree 扩展提供稳定边界。
+规划能力包括可解释 Agent Loop、强类型 Tool Registry、安全 Workspace、allow/ask/deny 权限决策、文件编辑与 Shell 工具、Context Budget 与压缩、Session/Checkpoint/Resume、结构化 Trace，以及 Git、测试、诊断、修复闭环。工程侧以严格类型、自动化测试、Windows/Linux CI、安全模型和 SemVer 发布流程保证可维护性，并为 Skills、Hooks、MCP、Subagent 与 Worktree 扩展提供稳定边界。
 
 ## 2. 项目定位
 
@@ -22,6 +22,9 @@
 ## 3. 技术栈
 
 最终技术栈以 `pyproject.toml`、ADR 和发布版本为准。
+
+M0 已实际使用 Python 3.13、uv、Hatchling、Pydantic v2、pydantic-settings、
+Platformdirs、Typer、Rich、Pytest、Coverage、Ruff 与 Pyright；其余技术随对应里程碑落地。
 
 | 分类 | 技术 |
 |---|---|
@@ -69,7 +72,7 @@
 | Checkpoint/Resume | 网络错误、进程退出和人工中断不应导致全部重跑 | SQLite、版本化 Schema、原子快照、幂等恢复 | 保存会话状态并从中断点继续 | 提高长任务容错和问题复现能力 | 故障注入场景、恢复成功率和耗时待回填 |
 | 结构化 Trace | 文本日志无法回答 Agent 为什么执行某动作 | 类型化事件、correlation ID、耗时、usage、JSONL、脱敏 | 记录模型、工具、权限、压缩、恢复和错误事件 | 支持调试、审计、成本分析和行为评估 | Trace Schema 覆盖、解析测试、脱敏测试 |
 | Git/test/repair loop | 文件写完不等于任务完成 | Git status/diff、测试发现、诊断解析、有限重试 | 修改后运行验证，将失败反馈给 Agent 修复 | 建立修改、验证、修复、再验证闭环 | 首次通过率、修复后通过率、平均修复轮次 |
-| 质量门禁 | 企业级项目需要稳定接口和回归保护 | Ruff、严格 Pyright、Pytest、85% 核心覆盖率门槛、CI、SemVer | 自动执行 lint、类型检查、测试、构建和安装验证 | 防止低质量变更进入发布版本 | CI 记录、覆盖率报告、Release smoke test |
+| 质量门禁 | 企业级项目需要稳定接口和回归保护 | Ruff、严格 Pyright、Pytest、85% 核心覆盖率门槛、哈希构建约束、CI、SemVer | 自动执行 lint、类型检查、测试、构建和安装验证 | 防止低质量变更进入发布版本 | 本地 21 项测试、86.49% 覆盖率、wheel/sdist 安装 smoke；远程 CI 待验证 |
 | 可扩展 Harness | Skills、Hooks、MCP、Subagent 会增加控制流复杂度 | 稳定 Protocol、EventBus、能力声明、依赖倒置 | 在不侵入 Agent Core 的前提下增加能力 | 避免扩展绕过权限、Trace 和 Session | 插件合约测试；扩展数量后续回填 |
 
 ## 6. 指标回填规则
@@ -136,6 +139,9 @@
 
 ### 8.1 尚未发布时
 
+- 完成 Mini CodeAgent M0 工程基础：显式配置优先级、Pydantic 强类型边界、密钥安全 JSON 日志与 `doctor` 诊断 CLI。
+- 建立 Ruff、严格 Pyright、Pytest 覆盖率门槛和哈希约束构建，本地 21 项测试全部通过，分支覆盖率 86.49%。
+- 对 wheel 与 sdist 分别执行隔离安装和真实 console-script smoke，并通过 `py.typed` 发布内联类型信息。
 - 设计 Framework-light、Provider-neutral 的 Python Mini CodeAgent，完成 Agent Loop、工具协议、安全 Workspace、权限模型和可恢复执行方案。
 - 为 Windows/Linux、严格类型、自动化测试、结构化 Trace 和 SemVer 发布定义工程验收标准。
 - 建立覆盖路径逃逸、权限拒绝、上下文压缩、故障恢复和修复闭环的验证计划。

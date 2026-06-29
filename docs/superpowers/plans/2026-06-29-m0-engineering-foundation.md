@@ -15,6 +15,8 @@
 | Path | Responsibility |
 |---|---|
 | `pyproject.toml` | Package metadata, dependencies, quality tool configuration |
+| `build-constraints.in` | Human-maintained build backend requirement |
+| `build-constraints.txt` | Hashed, reproducible build dependency constraints |
 | `.python-version` | Local default Python version |
 | `.gitignore` | Worktree, generated, secret, cache, build and runtime exclusions |
 | `README.md` | Product status, install and M0 usage |
@@ -22,6 +24,7 @@
 | `.env.example` | Environment variable names without secret values |
 | `src/mini_code_agent/__init__.py` | Package version export |
 | `src/mini_code_agent/__main__.py` | `python -m mini_code_agent` entry point |
+| `src/mini_code_agent/py.typed` | PEP 561 inline typing marker |
 | `src/mini_code_agent/config.py` | Typed settings and precedence-aware loader |
 | `src/mini_code_agent/logging.py` | JSON logging and recursive secret redaction |
 | `src/mini_code_agent/diagnostics.py` | Side-effect-free runtime health report |
@@ -106,12 +109,13 @@ dependencies = [
 mini-code-agent = "mini_code_agent.cli:app"
 
 [build-system]
-requires = ["hatchling>=1.27,<2"]
+requires = ["hatchling==1.30.1"]
 build-backend = "hatchling.build"
 
 [dependency-groups]
 dev = [
     "build>=1.2,<2",
+    "hatchling==1.30.1",
     "pyright>=1.1.390",
     "pytest>=8.3,<10",
     "pytest-cov>=6,<8",
@@ -1285,15 +1289,22 @@ git commit -m "docs: add M0 governance and learning evidence"
 Create `tests/smoke_test.py`:
 
 ```python
-from typer.testing import CliRunner
+import shutil
+import subprocess
 
 from mini_code_agent import __version__
-from mini_code_agent.cli import app
 
 
 def verify_installed_package() -> None:
-    result = CliRunner().invoke(app, ["--version"])
-    assert result.exit_code == 0
+    executable = shutil.which("mini-code-agent")
+    assert executable is not None
+    result = subprocess.run(
+        [executable, "--version"],
+        check=False,
+        capture_output=True,
+        text=True,
+    )
+    assert result.returncode == 0
     assert result.stdout.strip() == __version__
 
 
@@ -1314,7 +1325,7 @@ uv run ruff format --check .
 uv run ruff check .
 uv run pyright
 uv run pytest --cov
-uv build
+uv build --build-constraint build-constraints.txt --require-hashes
 ```
 
 Expected:
@@ -1367,7 +1378,7 @@ jobs:
       - run: uv run --no-sync ruff format --check .
       - run: uv run --no-sync ruff check .
       - run: uv run --no-sync pyright
-      - run: uv build
+      - run: uv build --build-constraint build-constraints.txt --require-hashes
       - run: uv run --python 3.13 --isolated --no-project --with dist/*.whl tests/smoke_test.py
       - run: uv run --python 3.13 --isolated --no-project --with dist/*.tar.gz tests/smoke_test.py
 
@@ -1429,7 +1440,7 @@ uv run ruff format --check .
 uv run ruff check .
 uv run pyright
 uv run pytest --cov
-uv build
+uv build --build-constraint build-constraints.txt --require-hashes
 uv run mini-code-agent --version
 uv run mini-code-agent doctor --json
 git diff --check
@@ -1485,6 +1496,22 @@ git show --stat --oneline v0.1.0-alpha.0
 
 Expected: the tag points to the verified M0 evidence commit.
 
+## Post-review Security and Packaging Corrections
+
+Independent review found gaps that the initial happy-path tests did not cover. The implemented
+corrections are part of the M0 gate:
+
+- Pydantic validation hides input values, and invalid environment settings are normalized to
+  `ConfigurationError` so the CLI returns exit code 2 without a traceback.
+- Structured logging masks sensitive keys and removes configured secret values from messages,
+  event data, and exception text.
+- Diagnostics reject an existing regular file as a data directory.
+- Hatchling is pinned, included in `uv.lock`, and constrained with transitive SHA-256 hashes for
+  isolated builds.
+- The package includes `py.typed`, and smoke tests invoke the installed console script for both
+  wheel and source distribution.
+- Negative tests reproduce every review finding before the corresponding fix.
+
 ## M0 Completion Gate
 
 M0 is complete only when all statements below are supported by command output:
@@ -1493,7 +1520,8 @@ M0 is complete only when all statements below are supported by command output:
 - Ruff formatting and lint checks pass.
 - Pyright strict mode passes.
 - All tests pass with at least 85% package coverage.
-- Wheel and source distribution both build and pass smoke tests.
+- Wheel and source distribution both build with hashed backend constraints and pass installed
+  console-script smoke tests.
 - CLI version and doctor commands work under uv-managed Python 3.13.
 - No secret value appears in doctor or structured log tests.
 - Local Git worktree is clean.
