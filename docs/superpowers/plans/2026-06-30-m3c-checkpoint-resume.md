@@ -9,7 +9,7 @@ replaying uncheckpointed side effects.
 
 ## Task 1: Checkpoint Contracts and Lifecycle Events
 
-**Status:** Pending
+**Status:** Complete
 
 - Add `CheckpointSaved` and `StopReason.INTERRUPTED`.
 - Add immutable Checkpoint limits, snapshot, record, compatibility, policy, plan, and resume-state
@@ -99,4 +99,3 @@ replaying uncheckpointed side effects.
 - Run lock, dual-Python full tests, coverage, Ruff, strict Pyright, Bandit, pip-audit, hashed build,
   and four exact-artifact smoke tests.
 - Fast-forward merge, verify merged suite/CLI, tag `v0.9.0-alpha.0`, and clean the owned worktree.
-

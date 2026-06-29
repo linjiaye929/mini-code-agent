@@ -78,6 +78,14 @@ class ContextCompacted(EventBase):
         return self
 
 
+class CheckpointSaved(EventBase):
+    type: Literal["checkpoint_saved"] = "checkpoint_saved"
+    checkpoint_id: str = Field(pattern=_IDENTIFIER_PATTERN)
+    turn: int = Field(ge=0, le=100)
+    message_count: int = Field(ge=1, le=100_000)
+    transcript_sha256: str = Field(pattern=r"^[0-9a-f]{64}$")
+
+
 class RunStopped(EventBase):
     type: Literal["run_stopped"] = "run_stopped"
     turns: int = Field(ge=0, le=100)
@@ -94,6 +102,7 @@ AgentEvent = (
     | ToolStarted
     | ToolCompleted
     | ContextCompacted
+    | CheckpointSaved
     | RunStopped
 )
 

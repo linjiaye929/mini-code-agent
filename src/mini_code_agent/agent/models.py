@@ -17,6 +17,7 @@ class StopReason(StrEnum):
     INVALID_RESPONSE = "invalid_response"
     CONTEXT_LIMIT = "context_limit"
     PERSISTENCE_ERROR = "persistence_error"
+    INTERRUPTED = "interrupted"
     CANCELLED = "cancelled"
 
 

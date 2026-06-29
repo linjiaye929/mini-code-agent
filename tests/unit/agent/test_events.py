@@ -6,6 +6,7 @@ from pydantic import TypeAdapter, ValidationError
 from mini_code_agent.agent import events as event_models
 from mini_code_agent.agent.events import (
     AgentEvent,
+    CheckpointSaved,
     ContextCompacted,
     RecordingEventSink,
     RunStarted,
@@ -196,3 +197,23 @@ def test_context_compacted_rejects_inconsistent_metadata(
 
     with pytest.raises(ValidationError):
         ContextCompacted.model_validate(complete)
+
+
+def test_checkpoint_saved_event_is_bounded() -> None:
+    event = CheckpointSaved(
+        run_id="run-1",
+        checkpoint_id="checkpoint-1",
+        turn=1,
+        message_count=3,
+        transcript_sha256="a" * 64,
+    )
+
+    assert event.type == "checkpoint_saved"
+    with pytest.raises(ValidationError):
+        CheckpointSaved(
+            run_id="run-1",
+            checkpoint_id="../invalid",
+            turn=1,
+            message_count=3,
+            transcript_sha256="a" * 64,
+        )
