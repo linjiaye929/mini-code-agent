@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 import sqlite3
+from contextlib import closing
 from datetime import UTC, datetime, timedelta
 from itertools import pairwise
 from pathlib import Path
@@ -88,7 +89,7 @@ def lifecycle(run_id: str = "run-1") -> tuple[AgentEvent, ...]:
 
 
 def raw_trace(database: Path) -> tuple[sqlite3.Row, ...]:
-    with sqlite3.connect(database) as connection:
+    with closing(sqlite3.connect(database)) as connection, connection:
         connection.row_factory = sqlite3.Row
         return tuple(connection.execute("SELECT * FROM trace_events ORDER BY sequence").fetchall())
 
@@ -274,7 +275,7 @@ def test_trace_insert_failure_rolls_back_projection_and_hides_sql(
         events = lifecycle()
         for event in events[:-1]:
             journal.append(event)
-        with sqlite3.connect(database) as connection:
+        with closing(sqlite3.connect(database)) as connection, connection:
             connection.execute(
                 """
                 CREATE TRIGGER secret_fail_trace
@@ -307,7 +308,10 @@ def test_busy_database_fails_within_configured_budget(tmp_path: Path) -> None:
         store.create_session("session-1")
         journal = store.journal("session-1")
         event = lifecycle()[0]
-        with sqlite3.connect(database, isolation_level=None) as blocker:
+        with (
+            closing(sqlite3.connect(database, isolation_level=None)) as blocker,
+            blocker,
+        ):
             blocker.execute("BEGIN IMMEDIATE")
             with pytest.raises(PersistenceError) as captured:
                 journal.append(event)

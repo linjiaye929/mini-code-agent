@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import shutil
 import sqlite3
+from contextlib import closing
 from pathlib import Path
 
 import pytest
@@ -151,7 +152,7 @@ async def test_durable_tool_started_prevents_second_governed_write(
     )
     with SqliteSessionTraceStore(database) as store:
         store.create_session("session-1")
-        with sqlite3.connect(database) as connection:
+        with closing(sqlite3.connect(database)) as connection, connection:
             connection.execute(
                 """
                 CREATE TRIGGER fail_second_tool_started
@@ -210,7 +211,7 @@ async def test_copied_agent_trace_detects_payload_tampering(
 
     tampered = tmp_path / "tampered.db"
     shutil.copy2(database, tampered)
-    with sqlite3.connect(tampered) as connection:
+    with closing(sqlite3.connect(tampered)) as connection, connection:
         connection.execute(
             "UPDATE trace_events SET payload_json = ? WHERE sequence = 2",
             ('{"type":"secret-tampered"}',),

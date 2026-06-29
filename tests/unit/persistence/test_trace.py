@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import sqlite3
+from contextlib import closing
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
@@ -156,7 +157,7 @@ def test_verify_trace_detects_corruption_without_leaking_content(
 ) -> None:
     database = tmp_path / "secret-state.db"
     store = populated_store(database)
-    with sqlite3.connect(database) as connection:
+    with closing(sqlite3.connect(database)) as connection, connection:
         connection.execute(sql, parameters)
 
     with pytest.raises(PersistenceError) as captured:
@@ -170,7 +171,7 @@ def test_verify_trace_detects_corruption_without_leaking_content(
 def test_read_trace_rejects_malformed_event_payload(tmp_path: Path) -> None:
     database = tmp_path / "state.db"
     store = populated_store(database)
-    with sqlite3.connect(database) as connection:
+    with closing(sqlite3.connect(database)) as connection, connection:
         connection.execute(
             "UPDATE trace_events SET payload_json = ? WHERE sequence = 2",
             ('{"type":"secret-unknown-event"}',),

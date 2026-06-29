@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import sqlite3
+from contextlib import closing
 from pathlib import Path
 
 import pytest
@@ -14,7 +15,7 @@ def test_schema_initializes_versioned_tables_and_reopens(tmp_path: Path) -> None
     database = tmp_path / "state.db"
     initialize_database(database, SessionTraceLimits())
 
-    with sqlite3.connect(database) as connection:
+    with closing(sqlite3.connect(database)) as connection, connection:
         version = connection.execute("PRAGMA user_version").fetchone()[0]
         tables = {
             row[0]
@@ -49,7 +50,7 @@ def test_configured_connection_enables_sqlite_safety_pragmas(
 
 def test_schema_rejects_unsupported_future_version(tmp_path: Path) -> None:
     database = tmp_path / "future.db"
-    with sqlite3.connect(database) as connection:
+    with closing(sqlite3.connect(database)) as connection, connection:
         connection.execute("PRAGMA user_version = 2")
 
     with pytest.raises(PersistenceError) as captured:

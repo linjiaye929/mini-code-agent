@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import re
 import sqlite3
+from contextlib import closing
 from pathlib import Path
 
 import pytest
@@ -81,7 +82,7 @@ def test_list_sessions_is_bounded_and_deterministic(tmp_path: Path) -> None:
     store.create_session("session-c")
     store.create_session("session-a")
     store.create_session("session-b")
-    with sqlite3.connect(database) as connection:
+    with closing(sqlite3.connect(database)) as connection, connection:
         connection.execute(
             "UPDATE sessions SET created_at = ?, updated_at = ?",
             ("2026-06-30T00:00:00+00:00", "2026-06-30T00:00:00+00:00"),
@@ -144,7 +145,7 @@ def test_malformed_database_row_is_normalized_without_raw_content(
     store = SqliteSessionTraceStore(database)
     store.initialize()
     store.create_session("session-1")
-    with sqlite3.connect(database) as connection:
+    with closing(sqlite3.connect(database)) as connection, connection:
         connection.execute(
             "UPDATE sessions SET created_at = ? WHERE session_id = ?",
             ("secret-invalid-timestamp", "session-1"),
