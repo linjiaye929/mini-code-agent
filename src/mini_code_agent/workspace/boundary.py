@@ -170,7 +170,7 @@ class WorkspaceBoundary:
                 raise self._traversal_error("Workspace directory could not be scanned.") from None
 
             for entry in entries:
-                if entry.name == ".git":
+                if entry.name.casefold() == ".git":
                     continue
                 if self._is_link_or_junction(entry):
                     raise WorkspaceError(

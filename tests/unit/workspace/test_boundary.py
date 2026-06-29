@@ -289,6 +289,15 @@ def test_list_files_is_deterministic_and_excludes_git_metadata(tmp_path: Path) -
     assert files == (".hidden", "src/a.py", "src/z.py")
 
 
+def test_list_files_excludes_case_variant_git_metadata(tmp_path: Path) -> None:
+    (tmp_path / ".GIT").mkdir()
+    (tmp_path / ".GIT" / "config").write_bytes(b"secret")
+    (tmp_path / "visible.txt").write_bytes(b"visible")
+    boundary = WorkspaceBoundary(tmp_path)
+
+    assert boundary.list_files() == ("visible.txt",)
+
+
 def test_list_files_can_start_from_subdirectory(tmp_path: Path) -> None:
     (tmp_path / "src").mkdir()
     (tmp_path / "src" / "a.py").write_bytes(b"a")

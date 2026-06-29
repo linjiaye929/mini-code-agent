@@ -197,3 +197,34 @@ async def test_registry_normalizes_invalid_executor_result(
         "code": code,
         "message": "Tool returned an invalid result.",
     }
+
+
+@pytest.mark.asyncio
+async def test_registry_rejects_oversized_tool_result() -> None:
+    registry = ToolRegistry(
+        [
+            EchoTool(
+                result=ToolResult(
+                    tool_call_id="call-1",
+                    content="x" * 11,
+                )
+            )
+        ],
+        max_result_chars=10,
+    )
+
+    result = await registry.execute(
+        ToolCall(id="call-1", name="echo", arguments={"value": "hello"})
+    )
+
+    assert result.is_error is True
+    assert error_payload(result)["error"] == {
+        "code": "tool_result_too_large",
+        "message": "Tool result exceeded the configured size limit.",
+    }
+
+
+@pytest.mark.parametrize("limit", [0, 16 * 1024 * 1024 + 1])
+def test_registry_rejects_invalid_result_limit(limit: int) -> None:
+    with pytest.raises(ValueError, match="max_result_chars"):
+        ToolRegistry([EchoTool()], max_result_chars=limit)

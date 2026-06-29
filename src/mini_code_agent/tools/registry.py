@@ -23,7 +23,14 @@ class _SchemaValidator(Protocol):
 
 
 class ToolRegistry:
-    def __init__(self, tools: Iterable[RegisteredTool]) -> None:
+    def __init__(
+        self,
+        tools: Iterable[RegisteredTool],
+        *,
+        max_result_chars: int = 8 * 1024 * 1024,
+    ) -> None:
+        if not 1 <= max_result_chars <= 16 * 1024 * 1024:
+            raise ValueError("max_result_chars must be between 1 and 16777216")
         ordered_tools = tuple(tools)
         entries = tuple((tool, tool.definition) for tool in ordered_tools)
         names = tuple(definition.name for _, definition in entries)
@@ -45,6 +52,7 @@ class ToolRegistry:
         self._tools = {definition.name: tool for tool, definition in entries}
         self._validators = validators
         self._definitions = tuple(definition for _, definition in entries)
+        self._max_result_chars = max_result_chars
 
     @property
     def definitions(self) -> tuple[ToolDefinition, ...]:
@@ -80,6 +88,12 @@ class ToolRegistry:
                 call.id,
                 "invalid_tool_result",
                 "Tool returned an invalid result.",
+            )
+        if len(candidate.content) > self._max_result_chars:
+            return self._error(
+                call.id,
+                "tool_result_too_large",
+                "Tool result exceeded the configured size limit.",
             )
         return candidate
 
