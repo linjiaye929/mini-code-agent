@@ -16,6 +16,7 @@ class StopReason(StrEnum):
     DUPLICATE_TOOL_CALL = "duplicate_tool_call"
     INVALID_RESPONSE = "invalid_response"
     CONTEXT_LIMIT = "context_limit"
+    PERSISTENCE_ERROR = "persistence_error"
     CANCELLED = "cancelled"
 
 

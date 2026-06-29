@@ -3,7 +3,17 @@ from typing import cast
 
 import pytest
 
-from mini_code_agent.agent.events import ContextCompacted, RecordingEventSink, RunStopped
+from mini_code_agent.agent.events import (
+    AgentEvent,
+    ContextCompacted,
+    ModelCompleted,
+    ModelStarted,
+    RecordingEventSink,
+    RunStarted,
+    RunStopped,
+    ToolCompleted,
+    ToolStarted,
+)
 from mini_code_agent.agent.models import AgentLimits, StopReason
 from mini_code_agent.agent.runtime import AgentRuntime
 from mini_code_agent.context.errors import ContextError, ContextErrorCode
@@ -189,6 +199,27 @@ class FailingEventSink:
     def publish(self, event: object) -> None:
         if isinstance(event, self._fail_type):
             raise RuntimeError("sink-failed")
+
+
+class RecordingJournal:
+    def __init__(
+        self,
+        fail_type: type[object] | None = None,
+        *,
+        before_append: object | None = None,
+    ) -> None:
+        self.events: list[AgentEvent] = []
+        self.attempts: list[AgentEvent] = []
+        self._fail_type = fail_type
+        self._before_append = before_append
+
+    def append(self, event: AgentEvent) -> None:
+        self.attempts.append(event)
+        if callable(self._before_append):
+            self._before_append(event)
+        if self._fail_type is not None and isinstance(event, self._fail_type):
+            raise RuntimeError("secret-journal-failure")
+        self.events.append(event)
 
 
 @pytest.mark.asyncio
@@ -592,21 +623,19 @@ async def test_unregistered_tool_never_reaches_executor() -> None:
     "fail_type",
     [
         "run_started",
+        "model_started",
         "model_completed",
+        "tool_started",
         "tool_completed",
         "run_stopped",
     ],
 )
 async def test_event_sink_failure_never_aborts_run(fail_type: str) -> None:
-    from mini_code_agent.agent.events import (
-        ModelCompleted,
-        RunStarted,
-        ToolCompleted,
-    )
-
     event_types = {
         "run_started": RunStarted,
+        "model_started": ModelStarted,
         "model_completed": ModelCompleted,
+        "tool_started": ToolStarted,
         "tool_completed": ToolCompleted,
         "run_stopped": RunStopped,
     }
@@ -760,3 +789,137 @@ async def test_context_event_sink_failure_does_not_change_compaction() -> None:
 
     assert result.stop_reason is StopReason.COMPLETED
     assert len(provider.requests[2].messages) == 3
+
+
+@pytest.mark.asyncio
+async def test_required_journal_records_ordered_runtime_lifecycle() -> None:
+    tools = RecordingTool()
+
+    def assert_before_execution(event: AgentEvent) -> None:
+        if isinstance(event, ToolStarted):
+            assert tools.calls == []
+
+    journal = RecordingJournal(before_append=assert_before_execution)
+    provider = ScriptedProvider([tool_response("call-1"), final_response("done")])
+    runtime = AgentRuntime(
+        provider,
+        tools,
+        journal=journal,
+    )
+
+    result = await runtime.run(user_prompt="inspect", run_id="journal-run")
+
+    assert result.stop_reason is StopReason.COMPLETED
+    assert tuple(event.type for event in journal.events) == (
+        "run_started",
+        "model_started",
+        "model_completed",
+        "tool_started",
+        "tool_completed",
+        "model_started",
+        "model_completed",
+        "run_stopped",
+    )
+    assert journal.events[1].request_id == "journal-run:1"  # type: ignore[union-attr]
+    started = journal.events[3]
+    assert isinstance(started, ToolStarted)
+    assert started.side_effect is SideEffect.READ_ONLY
+    stopped = journal.events[-1]
+    assert isinstance(stopped, RunStopped)
+    assert stopped.turns == 2
+    assert stopped.tool_calls == 1
+    assert stopped.usage == result.usage
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    (
+        "fail_type",
+        "expected_provider_calls",
+        "expected_tool_calls",
+        "expected_messages",
+    ),
+    [
+        (RunStarted, 0, 0, 1),
+        (ModelStarted, 0, 0, 1),
+        (ModelCompleted, 1, 0, 2),
+        (ToolStarted, 1, 0, 2),
+        (ToolCompleted, 1, 1, 2),
+        (RunStopped, 2, 1, 4),
+    ],
+)
+async def test_required_journal_failure_stops_all_later_work(
+    fail_type: type[object],
+    expected_provider_calls: int,
+    expected_tool_calls: int,
+    expected_messages: int,
+) -> None:
+    journal = RecordingJournal(fail_type)
+    provider = ScriptedProvider([tool_response("call-1"), final_response("done")])
+    tools = RecordingTool()
+    observer = RecordingEventSink()
+    runtime = AgentRuntime(
+        provider,
+        tools,
+        events=observer,
+        journal=journal,
+    )
+
+    result = await runtime.run(
+        user_prompt="secret-user-prompt",
+        run_id="journal-failure",
+    )
+
+    assert result.stop_reason is StopReason.PERSISTENCE_ERROR
+    assert result.error == "Agent state could not be persisted."
+    assert "secret-journal-failure" not in (result.error or "")
+    assert len(provider.requests) == expected_provider_calls
+    assert len(tools.calls) == expected_tool_calls
+    assert len(result.messages) == expected_messages
+    stopped = [event for event in observer.events if isinstance(event, RunStopped)]
+    assert stopped[-1].reason is StopReason.PERSISTENCE_ERROR
+
+
+@pytest.mark.asyncio
+async def test_required_journal_failure_during_cancel_does_not_mask_cancellation() -> None:
+    journal = RecordingJournal(RunStopped)
+    runtime = AgentRuntime(
+        ScriptedProvider([final_response("late")], delay_seconds=10),
+        RuntimeInfoTool(),
+        journal=journal,
+    )
+    task = asyncio.create_task(runtime.run(user_prompt="inspect", run_id="cancel-run"))
+    await asyncio.sleep(0)
+
+    task.cancel()
+
+    with pytest.raises(asyncio.CancelledError):
+        await task
+    attempted_stop = journal.attempts[-1]
+    assert isinstance(attempted_stop, RunStopped)
+    assert attempted_stop.reason is StopReason.CANCELLED
+
+
+@pytest.mark.asyncio
+async def test_compaction_journal_failure_stops_before_next_provider() -> None:
+    context = RecordingContext(compact_on_message_count=5)
+    journal = RecordingJournal(ContextCompacted)
+    provider = ScriptedProvider(
+        [
+            tool_response("call-1"),
+            tool_response("call-2"),
+            final_response("must-not-run"),
+        ]
+    )
+    runtime = AgentRuntime(
+        provider,
+        RuntimeInfoTool(),
+        context=context,
+        journal=journal,
+    )
+
+    result = await runtime.run(user_prompt="inspect", run_id="compaction-journal")
+
+    assert result.stop_reason is StopReason.PERSISTENCE_ERROR
+    assert len(provider.requests) == 2
+    assert len(result.messages) == 5

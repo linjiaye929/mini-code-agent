@@ -3,18 +3,23 @@ from __future__ import annotations
 import asyncio
 import json
 import re
+from contextlib import suppress
+from dataclasses import dataclass, field
 from typing import cast
 from uuid import uuid4
 
 from mini_code_agent.agent.events import (
     AgentEvent,
     ContextCompacted,
+    EventJournal,
     EventSink,
     ModelCompleted,
+    ModelStarted,
     NullEventSink,
     RunStarted,
     RunStopped,
     ToolCompleted,
+    ToolStarted,
 )
 from mini_code_agent.agent.models import AgentLimits, AgentResult, StopReason
 from mini_code_agent.context.errors import ContextError
@@ -34,6 +39,20 @@ from mini_code_agent.providers.base import (
 from mini_code_agent.tools.base import SideEffect, ToolExecutor
 
 
+class _JournalFailure(RuntimeError):
+    pass
+
+
+@dataclass(slots=True)
+class _RunState:
+    run_id: str
+    messages: list[Message]
+    usage: TokenUsage = field(default_factory=TokenUsage)
+    seen_call_ids: set[str] = field(default_factory=lambda: set[str]())
+    turns: int = 0
+    tool_calls: int = 0
+
+
 class AgentRuntime:
     def __init__(
         self,
@@ -42,12 +61,14 @@ class AgentRuntime:
         *,
         limits: AgentLimits | None = None,
         events: EventSink | None = None,
+        journal: EventJournal | None = None,
         context: ContextPreparer | None = None,
     ) -> None:
         self._provider = provider
         self._tools = tools
         self._limits = limits or AgentLimits()
         self._events = events or NullEventSink()
+        self._journal = journal
         self._context = context or ContextManager()
         definitions = tools.definitions
         names = tuple(definition.name for definition in definitions)
@@ -60,6 +81,7 @@ class AgentRuntime:
             raise ValueError("Side-effecting tools require governed execution.")
         self._definitions = definitions
         self._tool_names = frozenset(names)
+        self._side_effects = {definition.name: definition.side_effect for definition in definitions}
 
     async def run(
         self,
@@ -69,57 +91,60 @@ class AgentRuntime:
         run_id: str | None = None,
     ) -> AgentResult:
         active_run_id = self._validate_run_id(run_id or str(uuid4()))
-        messages = [Message.user_text(user_prompt)]
-        usage = TokenUsage()
-        seen_call_ids: set[str] = set()
-        tool_call_count = 0
-        self._publish(RunStarted(run_id=active_run_id, max_turns=self._limits.max_turns))
+        state = _RunState(
+            run_id=active_run_id,
+            messages=[Message.user_text(user_prompt)],
+        )
+        try:
+            self._emit(
+                RunStarted(
+                    run_id=active_run_id,
+                    max_turns=self._limits.max_turns,
+                )
+            )
+            return await self._run_loop(state, system_prompt=system_prompt)
+        except _JournalFailure:
+            return self._persistence_failure(state)
 
+    async def _run_loop(
+        self,
+        state: _RunState,
+        *,
+        system_prompt: str,
+    ) -> AgentResult:
         for turn in range(1, self._limits.max_turns + 1):
             try:
                 window_candidate = cast(
                     object,
                     self._context.prepare(
                         system_prompt=system_prompt,
-                        messages=tuple(messages),
+                        messages=tuple(state.messages),
                         tools=self._definitions,
                     ),
                 )
             except ContextError:
                 return self._stop(
-                    active_run_id,
-                    messages,
+                    state,
                     StopReason.CONTEXT_LIMIT,
-                    turn - 1,
-                    tool_call_count,
-                    usage,
                     "Model context limit exceeded.",
                 )
             except Exception:
                 return self._stop(
-                    active_run_id,
-                    messages,
+                    state,
                     StopReason.CONTEXT_LIMIT,
-                    turn - 1,
-                    tool_call_count,
-                    usage,
                     "Model context limit exceeded.",
                 )
             if not isinstance(window_candidate, ContextWindow):
                 return self._stop(
-                    active_run_id,
-                    messages,
+                    state,
                     StopReason.CONTEXT_LIMIT,
-                    turn - 1,
-                    tool_call_count,
-                    usage,
                     "Model context limit exceeded.",
                 )
             window = window_candidate
             if window.compacted:
-                self._publish(
+                self._emit(
                     ContextCompacted(
-                        run_id=active_run_id,
+                        run_id=state.run_id,
                         turn=turn,
                         estimated_before=window.estimated_before,
                         estimated_after=window.estimated_after,
@@ -129,10 +154,17 @@ class AgentRuntime:
                     )
                 )
             request = ModelRequest(
-                request_id=f"{active_run_id}:{turn}",
+                request_id=f"{state.run_id}:{turn}",
                 system_prompt=window.system_prompt,
                 messages=window.messages,
                 tools=self._definitions,
+            )
+            self._emit(
+                ModelStarted(
+                    run_id=state.run_id,
+                    turn=turn,
+                    request_id=request.request_id,
+                )
             )
             try:
                 async with asyncio.timeout(self._limits.provider_timeout_seconds):
@@ -141,22 +173,12 @@ class AgentRuntime:
                         await self._provider.complete(request),
                     )
             except asyncio.CancelledError:
-                self._publish(
-                    RunStopped(
-                        run_id=active_run_id,
-                        turns=turn - 1,
-                        reason=StopReason.CANCELLED,
-                    )
-                )
+                self._emit_cancelled(state)
                 raise
             except TimeoutError:
                 return self._stop(
-                    active_run_id,
-                    messages,
+                    state,
                     StopReason.PROVIDER_TIMEOUT,
-                    turn - 1,
-                    tool_call_count,
-                    usage,
                     "Provider request timed out.",
                 )
             except ProviderError as exc:
@@ -166,45 +188,34 @@ class AgentRuntime:
                     else StopReason.PROVIDER_ERROR
                 )
                 return self._stop(
-                    active_run_id,
-                    messages,
+                    state,
                     reason,
-                    turn - 1,
-                    tool_call_count,
-                    usage,
                     exc.public_message,
                 )
             except Exception:
                 return self._stop(
-                    active_run_id,
-                    messages,
+                    state,
                     StopReason.PROVIDER_ERROR,
-                    turn - 1,
-                    tool_call_count,
-                    usage,
                     "Provider request failed unexpectedly.",
                 )
 
             if not isinstance(response_candidate, ModelResponse):
                 return self._stop(
-                    active_run_id,
-                    messages,
+                    state,
                     StopReason.INVALID_RESPONSE,
-                    turn - 1,
-                    tool_call_count,
-                    usage,
                     "Provider returned an invalid response.",
                 )
             response = response_candidate
 
-            messages.append(response.message)
-            usage = TokenUsage(
-                input_tokens=usage.input_tokens + response.usage.input_tokens,
-                output_tokens=usage.output_tokens + response.usage.output_tokens,
+            state.messages.append(response.message)
+            state.turns = turn
+            state.usage = TokenUsage(
+                input_tokens=state.usage.input_tokens + response.usage.input_tokens,
+                output_tokens=state.usage.output_tokens + response.usage.output_tokens,
             )
-            self._publish(
+            self._emit(
                 ModelCompleted(
-                    run_id=active_run_id,
+                    run_id=state.run_id,
                     turn=turn,
                     finish_reason=response.finish_reason,
                     usage=response.usage,
@@ -213,83 +224,74 @@ class AgentRuntime:
 
             if response.finish_reason is FinishReason.STOP:
                 return self._stop(
-                    active_run_id,
-                    messages,
+                    state,
                     StopReason.COMPLETED,
-                    turn,
-                    tool_call_count,
-                    usage,
                     final_text=response.message.text,
                 )
 
             if response.finish_reason is not FinishReason.TOOL_CALL:
                 return self._stop(
-                    active_run_id,
-                    messages,
+                    state,
                     StopReason.PROVIDER_LIMIT,
-                    turn,
-                    tool_call_count,
-                    usage,
                     "Provider stopped before completing the response.",
                 )
 
             calls = response.message.tool_calls
             call_ids = tuple(call.id for call in calls)
-            if len(set(call_ids)) != len(call_ids) or seen_call_ids.intersection(call_ids):
+            if len(set(call_ids)) != len(call_ids) or state.seen_call_ids.intersection(call_ids):
                 return self._stop(
-                    active_run_id,
-                    messages,
+                    state,
                     StopReason.DUPLICATE_TOOL_CALL,
-                    turn,
-                    tool_call_count,
-                    usage,
                     "Provider repeated a ToolCall identifier.",
                 )
-            if tool_call_count + len(calls) > self._limits.max_tool_calls:
+            if state.tool_calls + len(calls) > self._limits.max_tool_calls:
                 return self._stop(
-                    active_run_id,
-                    messages,
+                    state,
                     StopReason.MAX_TOOL_CALLS,
-                    turn,
-                    tool_call_count,
-                    usage,
                     "Agent reached the ToolCall limit.",
                 )
 
-            seen_call_ids.update(call_ids)
+            state.seen_call_ids.update(call_ids)
             tool_results: list[ToolResult] = []
             for call in calls:
-                tool_call_count += 1
+                self._emit(
+                    ToolStarted(
+                        run_id=state.run_id,
+                        turn=turn,
+                        tool_call_id=call.id,
+                        tool_name=call.name,
+                        side_effect=self._side_effects.get(
+                            call.name,
+                            SideEffect.READ_ONLY,
+                        ),
+                    )
+                )
+                state.tool_calls += 1
                 try:
                     result = await self._execute_tool(call)
                 except asyncio.CancelledError:
-                    self._publish(
-                        RunStopped(
-                            run_id=active_run_id,
-                            turns=turn,
-                            reason=StopReason.CANCELLED,
-                        )
-                    )
+                    self._emit_cancelled(state)
                     raise
                 tool_results.append(result)
-                self._publish(
+                self._emit(
                     ToolCompleted(
-                        run_id=active_run_id,
+                        run_id=state.run_id,
                         turn=turn,
                         tool_call_id=call.id,
                         tool_name=call.name,
                         is_error=result.is_error,
                     )
                 )
-            messages.append(Message(role=MessageRole.USER, content=tuple(tool_results)))
+            state.messages.append(
+                Message(
+                    role=MessageRole.USER,
+                    content=tuple(tool_results),
+                )
+            )
 
         return self._stop(
-            active_run_id,
-            messages,
+            state,
             StopReason.MAX_TURNS,
-            self._limits.max_turns,
-            tool_call_count,
-            usage,
             "Agent reached the turn limit.",
         )
 
@@ -344,32 +346,73 @@ class AgentRuntime:
 
     def _stop(
         self,
-        run_id: str,
-        messages: list[Message],
+        state: _RunState,
         reason: StopReason,
-        turns: int,
-        tool_calls: int,
-        usage: TokenUsage,
         error: str | None = None,
         *,
         final_text: str | None = None,
     ) -> AgentResult:
+        self._emit(
+            RunStopped(
+                run_id=state.run_id,
+                turns=state.turns,
+                reason=reason,
+                tool_calls=state.tool_calls,
+                usage=state.usage,
+                error=_bounded_event_error(error),
+            )
+        )
+        return AgentResult(
+            run_id=state.run_id,
+            messages=tuple(state.messages),
+            stop_reason=reason,
+            turns=state.turns,
+            tool_calls=state.tool_calls,
+            usage=state.usage,
+            final_text=final_text,
+            error=error,
+        )
+
+    def _emit(self, event: AgentEvent) -> None:
+        if self._journal is not None:
+            try:
+                self._journal.append(event)
+            except Exception:
+                raise _JournalFailure from None
+        self._publish(event)
+
+    def _emit_cancelled(self, state: _RunState) -> None:
+        event = RunStopped(
+            run_id=state.run_id,
+            turns=state.turns,
+            reason=StopReason.CANCELLED,
+            tool_calls=state.tool_calls,
+            usage=state.usage,
+        )
+        if self._journal is not None:
+            with suppress(Exception):
+                self._journal.append(event)
+        self._publish(event)
+
+    def _persistence_failure(self, state: _RunState) -> AgentResult:
+        error = "Agent state could not be persisted."
         self._publish(
             RunStopped(
-                run_id=run_id,
-                turns=turns,
-                reason=reason,
+                run_id=state.run_id,
+                turns=state.turns,
+                reason=StopReason.PERSISTENCE_ERROR,
+                tool_calls=state.tool_calls,
+                usage=state.usage,
                 error=error,
             )
         )
         return AgentResult(
-            run_id=run_id,
-            messages=tuple(messages),
-            stop_reason=reason,
-            turns=turns,
-            tool_calls=tool_calls,
-            usage=usage,
-            final_text=final_text,
+            run_id=state.run_id,
+            messages=tuple(state.messages),
+            stop_reason=StopReason.PERSISTENCE_ERROR,
+            turns=state.turns,
+            tool_calls=state.tool_calls,
+            usage=state.usage,
             error=error,
         )
 
@@ -386,3 +429,7 @@ class AgentRuntime:
                 "run_id must be 1-96 ASCII letters, digits, dots, underscores, or hyphens."
             )
         return run_id
+
+
+def _bounded_event_error(error: str | None) -> str | None:
+    return error[:500] if error is not None else None

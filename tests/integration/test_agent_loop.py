@@ -4,10 +4,12 @@ import pytest
 
 from mini_code_agent.agent.events import (
     ModelCompleted,
+    ModelStarted,
     RecordingEventSink,
     RunStarted,
     RunStopped,
     ToolCompleted,
+    ToolStarted,
 )
 from mini_code_agent.agent.models import StopReason
 from mini_code_agent.agent.runtime import AgentRuntime
@@ -54,8 +56,11 @@ async def test_fake_provider_drives_native_tool_call_round_trip() -> None:
     assert payload["package_version"] == "0.7.0a0"
     assert [type(event) for event in events.events] == [
         RunStarted,
+        ModelStarted,
         ModelCompleted,
+        ToolStarted,
         ToolCompleted,
+        ModelStarted,
         ModelCompleted,
         RunStopped,
     ]

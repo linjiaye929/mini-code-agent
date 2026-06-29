@@ -154,7 +154,7 @@ git commit -m "feat: define durable lifecycle events"
 - Create: `src/mini_code_agent/persistence/models.py`
 - Create: `src/mini_code_agent/persistence/schema.py`
 - Create: `src/mini_code_agent/persistence/__init__.py`
-- Create: `tests/unit/persistence/test_models.py`
+- Create: `tests/unit/persistence/test_persistence_models.py`
 - Create: `tests/unit/persistence/test_schema.py`
 
 - [ ] Add failing model tests for identifier patterns, immutable bounded limits, status enums,
@@ -217,7 +217,7 @@ Add indexes on `(session_id, created_at)`, `(session_id, started_at)`, and
   SQL, or raw SQLite text. Run tests and static checks.
 
 ```powershell
-python -m pytest tests/unit/persistence/test_models.py tests/unit/persistence/test_schema.py -q
+python -m pytest tests/unit/persistence/test_persistence_models.py tests/unit/persistence/test_schema.py -q
 python -m ruff format --check src tests
 python -m ruff check src tests
 python -m pyright --pythonpath .\.venv\Scripts\python.exe
