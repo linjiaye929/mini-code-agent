@@ -3,8 +3,8 @@
 | Unit | Status | Evidence |
 |---|---|---|
 | L0 Python engineering foundation | Complete locally | Ruff、Pyright、25 passed、build、CLI doctor |
-| L1 Agent Loop | Not started | |
-| L2 Provider and Tool Calling | Not started | |
+| L1 Agent Loop | Complete locally | 27 Runtime tests + deterministic ToolCall integration |
+| L2 Provider and Tool Calling | In progress | Contracts and Fake Provider complete; real adapters pending |
 | L3 Tool Registry | Not started | |
 | L4 Workspace and Policy | Not started | |
 | L5 File/Edit/Shell/Git tools | Not started | |
@@ -50,3 +50,37 @@
 - Both artifacts passed isolated, installed console-script smoke tests.
 - `mini-code-agent doctor --json` reported healthy and did not expose an injected API key.
 - GitHub Windows/Linux matrix: pending until the repository is pushed and Actions runs.
+
+## L1/L2 Notes
+
+- `Protocol` plays the role of a Java interface without forcing inheritance.
+- Frozen Pydantic models are validated immutable DTOs at model, tool, and provider boundaries.
+- The Agent Loop is an explicit state machine with hard turn, ToolCall, and timeout limits; it
+  is not an unbounded `while` loop.
+- ToolCall IDs act like correlation IDs: each executed call produces exactly one result with the
+  same ID.
+- Multi-call batches are preflighted before execution, preventing partial side effects when a
+  later call is duplicated or over budget.
+- Tool arguments and schemas use recursively immutable JSON views for deterministic replay while
+  Pydantic serializers preserve standard JSON wire formats.
+- M1 rejects write, execute, and network tool definitions; this declaration is enforced by the
+  Runtime rather than trusted as documentation.
+- Lifecycle events are best-effort observability: a sink failure cannot abort the run or mask
+  cancellation.
+- `ScriptedProvider` is analogous to a deterministic test double for an external service and
+  enables full-loop tests without network calls or API keys.
+- Cancellation is recorded and re-raised instead of swallowed, preserving asyncio structured
+  concurrency semantics.
+- Provider adapters own vendor message conversion and public error normalization; they cannot
+  execute tools.
+
+## M1 Local Verification
+
+- uv-managed Python 3.13.14 project environment and isolated Python 3.12.13 on Windows 11.
+- M1-focused tests: 48 passed.
+- Full repository: 73 passed, 1 skipped because Windows denied symlink creation.
+- Branch-aware package coverage: 95.82%.
+- Ruff format/check and strict Pyright: passed.
+- Hashed build plus isolated wheel/sdist console-script smoke: passed.
+- Bandit source scan: no findings; pip-audit locked runtime dependencies: no known vulnerabilities.
+- Real Anthropic and OpenAI-compatible adapters: not implemented; scheduled for M1b.

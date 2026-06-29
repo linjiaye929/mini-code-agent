@@ -2,8 +2,8 @@
 
 A framework-light, provider-neutral coding agent built from first principles.
 
-> Status: pre-alpha. M0 provides the engineering foundation only; it does not yet execute
-> model or file tools.
+> Status: pre-alpha. M1 provides a provider-neutral, bounded Agent Core with a scripted
+> provider and read-only runtime tool. It does not yet connect to live models or file tools.
 
 ## Requirements
 
@@ -44,6 +44,7 @@ See `config.example.toml` and `.env.example` for supported inputs.
 - Learning map: `docs/learning/knowledge-map.md`
 - Learning evidence: `docs/learning/progress.md`
 - Resume evidence: `docs/resume/project-profile.md`
+- Agent Core: `docs/architecture/agent-core.md`
 - Threat model: `docs/architecture/threat-model.md`
 
 ## License

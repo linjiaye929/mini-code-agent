@@ -1712,3 +1712,20 @@ M1 is complete only when:
 - Ruff, strict Pyright, full tests, coverage, constrained build, and independent review pass;
 - learning and resume documents contain only measured M1 evidence;
 - the merged `main` worktree is clean and tagged `v0.2.0-alpha.0`.
+
+## Post-review Hardening
+
+Independent review expanded the original M1 contracts with required regression coverage:
+
+- ToolCall batches are fully preflighted before execution, so duplicate IDs or exhausted budget
+  cannot create partial unrecorded side effects.
+- Provider and Tool return values are checked at runtime even when their implementations claim to
+  satisfy the static Protocol.
+- Provider and Tool cancellation both publish a best-effort stopped event and re-raise the
+  original `CancelledError`.
+- Event sink failures are isolated at every lifecycle phase and cannot replace run outcomes.
+- ToolCall arguments and ToolDefinition schemas are recursively immutable while preserving JSON
+  serialization.
+- M1 enforces read-only tool definitions and prevents unregistered calls from reaching the
+  executor.
+- Run IDs are bounded before the first event, and stream ToolCall deltas include call ID and name.
