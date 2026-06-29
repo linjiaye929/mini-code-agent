@@ -70,6 +70,29 @@ class ResumeCompatibility(BaseModel):
     workspace_sha256: str = Field(pattern=_SHA256_PATTERN)
 
 
+class CheckpointDraft(BaseModel):
+    model_config = ConfigDict(extra="forbid", frozen=True)
+
+    checkpoint_id: str = Field(pattern=_IDENTIFIER_PATTERN)
+    source_run_id: str = Field(pattern=_IDENTIFIER_PATTERN)
+    created_at: datetime
+    system_prompt: str
+    messages: tuple[Message, ...] = Field(min_length=1, max_length=100_000)
+    turns: int = Field(ge=0, le=100)
+    tool_calls: int = Field(ge=0, le=1_000)
+    usage: TokenUsage = Field(default_factory=TokenUsage)
+    seen_call_ids: frozenset[_CallId] = Field(default_factory=frozenset, max_length=1_000)
+    tool_contract_sha256: str = Field(pattern=_SHA256_PATTERN)
+    workspace_sha256: str = Field(pattern=_SHA256_PATTERN)
+
+    @model_validator(mode="after")
+    def validate_draft(self) -> Self:
+        if self.created_at.tzinfo is None or self.created_at.utcoffset() is None:
+            raise ValueError("checkpoint timestamp must be timezone-aware")
+        _validate_state(self.messages, self.turns, self.tool_calls, self.seen_call_ids)
+        return self
+
+
 class CheckpointSnapshot(BaseModel):
     model_config = ConfigDict(extra="forbid", frozen=True)
 
@@ -88,6 +111,7 @@ class CheckpointSnapshot(BaseModel):
     seen_call_ids: frozenset[_CallId] = Field(default_factory=frozenset, max_length=1_000)
     tool_contract_sha256: str = Field(pattern=_SHA256_PATTERN)
     workspace_sha256: str = Field(pattern=_SHA256_PATTERN)
+    payload_sha256: str = Field(pattern=_SHA256_PATTERN)
     status: CheckpointStatus = CheckpointStatus.AVAILABLE
     resumed_run_id: str | None = Field(default=None, pattern=_IDENTIFIER_PATTERN)
     consumed_at: datetime | None = None
@@ -106,12 +130,21 @@ class CheckpointSnapshot(BaseModel):
                 raise ValueError("checkpoint consumption timestamp must be timezone-aware")
             if self.consumed_at < self.created_at:
                 raise ValueError("checkpoint timestamps are inconsistent")
-        turns, call_ids = _validate_stable_messages(self.messages)
-        if self.turns != turns:
-            raise ValueError("checkpoint turn count is inconsistent")
-        if self.tool_calls != len(call_ids) or self.seen_call_ids != frozenset(call_ids):
-            raise ValueError("checkpoint ToolCall state is inconsistent")
+        _validate_state(self.messages, self.turns, self.tool_calls, self.seen_call_ids)
         return self
+
+
+def _validate_state(
+    messages: tuple[Message, ...],
+    turns: int,
+    tool_calls: int,
+    seen_call_ids: frozenset[str],
+) -> None:
+    actual_turns, call_ids = _validate_stable_messages(messages)
+    if turns != actual_turns:
+        raise ValueError("checkpoint turn count is inconsistent")
+    if tool_calls != len(call_ids) or seen_call_ids != frozenset(call_ids):
+        raise ValueError("checkpoint ToolCall state is inconsistent")
 
 
 def _validate_stable_messages(messages: tuple[Message, ...]) -> tuple[int, tuple[str, ...]]:

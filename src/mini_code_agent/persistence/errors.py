@@ -13,6 +13,8 @@ class PersistenceErrorCode(StrEnum):
     RUN_CONFLICT = "run_conflict"
     INVALID_TRANSITION = "invalid_transition"
     EVENT_CONFLICT = "event_conflict"
+    CHECKPOINT_NOT_FOUND = "checkpoint_not_found"
+    CHECKPOINT_CONFLICT = "checkpoint_conflict"
     LIMIT_EXCEEDED = "limit_exceeded"
     TRACE_CORRUPT = "trace_corrupt"
     STORAGE_FAILED = "storage_failed"

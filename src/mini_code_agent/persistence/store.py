@@ -11,6 +11,11 @@ from uuid import uuid4
 
 from pydantic import SecretStr, ValidationError
 
+from mini_code_agent.checkpoint.models import CheckpointLimits, CheckpointSnapshot
+from mini_code_agent.persistence.checkpoints import (
+    SessionCheckpointJournal,
+    checkpoint_from_row,
+)
 from mini_code_agent.persistence.errors import (
     PersistenceError,
     PersistenceErrorCode,
@@ -40,10 +45,12 @@ class SqliteSessionTraceStore:
         database: Path,
         *,
         limits: SessionTraceLimits | None = None,
+        checkpoint_limits: CheckpointLimits | None = None,
         secrets: Iterable[str | SecretStr] = (),
     ) -> None:
         self._database = database
         self._limits = limits or SessionTraceLimits()
+        self._checkpoint_limits = checkpoint_limits or CheckpointLimits()
         self._secrets = _normalize_secrets(secrets)
         self._initialized = False
 
@@ -210,6 +217,69 @@ class SqliteSessionTraceStore:
             session_id,
             self._secrets,
         )
+
+    def checkpoints(self, session_id: str) -> SessionCheckpointJournal:
+        self._ensure_initialized()
+        self._validate_identifier(session_id)
+        self.get_session(session_id)
+        return SessionCheckpointJournal(
+            self._database,
+            self._limits,
+            self._checkpoint_limits,
+            session_id,
+            self._secrets,
+        )
+
+    def get_checkpoint(
+        self,
+        session_id: str,
+        checkpoint_id: str,
+    ) -> CheckpointSnapshot:
+        self._ensure_initialized()
+        self._validate_identifier(session_id)
+        self._validate_identifier(checkpoint_id)
+        with connect_database(self._database, self._limits) as connection:
+            row = connection.execute(
+                "SELECT * FROM checkpoints WHERE session_id = ? AND checkpoint_id = ?",
+                (session_id, checkpoint_id),
+            ).fetchone()
+        if row is None:
+            raise PersistenceError(
+                PersistenceErrorCode.CHECKPOINT_NOT_FOUND,
+                "Checkpoint was not found.",
+            )
+        return checkpoint_from_row(row)
+
+    def list_checkpoints(
+        self,
+        session_id: str,
+        *,
+        limit: int = 100,
+    ) -> tuple[CheckpointSnapshot, ...]:
+        self._ensure_initialized()
+        self._validate_identifier(session_id)
+        self._validate_query_limit(limit)
+        self.get_session(session_id)
+        with connect_database(self._database, self._limits) as connection:
+            rows = connection.execute(
+                """
+                SELECT * FROM checkpoints
+                WHERE session_id = ?
+                ORDER BY created_at DESC, checkpoint_id ASC
+                LIMIT ?
+                """,
+                (session_id, limit),
+            ).fetchall()
+        return tuple(checkpoint_from_row(row) for row in rows)
+
+    def latest_checkpoint(self, session_id: str) -> CheckpointSnapshot:
+        checkpoints = self.list_checkpoints(session_id, limit=1)
+        if not checkpoints:
+            raise PersistenceError(
+                PersistenceErrorCode.CHECKPOINT_NOT_FOUND,
+                "Checkpoint was not found.",
+            )
+        return checkpoints[0]
 
     def read_trace(
         self,

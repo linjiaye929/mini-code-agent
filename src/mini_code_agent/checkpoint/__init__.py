@@ -1,6 +1,7 @@
 from mini_code_agent.checkpoint.fingerprint import tool_contract_sha256
 from mini_code_agent.checkpoint.models import (
     CHECKPOINT_FORMAT_VERSION,
+    CheckpointDraft,
     CheckpointLimits,
     CheckpointSnapshot,
     CheckpointStatus,
@@ -12,6 +13,7 @@ from mini_code_agent.checkpoint.workspace import workspace_sha256
 
 __all__ = [
     "CHECKPOINT_FORMAT_VERSION",
+    "CheckpointDraft",
     "CheckpointLimits",
     "CheckpointSnapshot",
     "CheckpointStatus",

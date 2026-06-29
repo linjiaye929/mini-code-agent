@@ -47,6 +47,7 @@ def snapshot(**overrides: object) -> CheckpointSnapshot:
         "seen_call_ids": frozenset({"call-1"}),
         "tool_contract_sha256": "b" * 64,
         "workspace_sha256": "c" * 64,
+        "payload_sha256": "d" * 64,
     }
     values.update(overrides)
     return CheckpointSnapshot.model_validate(values)

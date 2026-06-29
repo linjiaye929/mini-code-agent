@@ -39,7 +39,7 @@ replaying uncheckpointed side effects.
 
 ## Task 4: Transactional Checkpoint Save and Query
 
-**Status:** Pending
+**Status:** Complete
 
 - Refactor Trace append internals for reuse inside an existing transaction.
 - Save `CheckpointSaved`, Trace head, and canonical snapshot row atomically.

@@ -47,95 +47,17 @@ class SessionEventJournal:
         with connect_database(self._database, self._limits) as connection:
             try:
                 connection.execute("BEGIN IMMEDIATE")
-                session = _load_session(connection, self._session_id)
-                duplicate = connection.execute(
-                    """
-                    SELECT session_id, payload_json
-                    FROM trace_events
-                    WHERE event_id = ?
-                    """,
-                    (event.event_id,),
-                ).fetchone()
-                if duplicate is not None:
-                    if (
-                        str(duplicate["session_id"]) == self._session_id
-                        and str(duplicate["payload_json"]) == payload_json
-                    ):
-                        connection.rollback()
-                        return
-                    raise PersistenceError(
-                        PersistenceErrorCode.EVENT_CONFLICT,
-                        "Trace event identifier conflicts with stored data.",
-                    )
-                if session.event_count >= self._limits.max_events_per_session:
-                    raise PersistenceError(
-                        PersistenceErrorCode.LIMIT_EXCEEDED,
-                        "Session trace reached the configured event limit.",
-                    )
-                _validate_trace_head(connection, session)
-                _validate_event_time(session, event.timestamp)
-                _apply_projection(connection, self._session_id, session, event)
-
-                sequence = session.next_sequence
-                current_sha256 = event_sha256(
-                    session_id=self._session_id,
-                    sequence=sequence,
-                    previous_sha256=session.trace_head_sha256,
-                    event_payload=payload,
+                appended = append_event_in_transaction(
+                    connection,
+                    self._limits,
+                    self._session_id,
+                    event,
+                    payload,
+                    payload_json,
                 )
-                connection.execute(
-                    """
-                    INSERT INTO trace_events (
-                        session_id,
-                        sequence,
-                        schema_version,
-                        run_id,
-                        event_id,
-                        event_type,
-                        event_timestamp,
-                        payload_json,
-                        previous_sha256,
-                        event_sha256
-                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-                    """,
-                    (
-                        self._session_id,
-                        sequence,
-                        TRACE_SCHEMA_VERSION,
-                        event.run_id,
-                        event.event_id,
-                        event.type,
-                        cast(str, payload["timestamp"]),
-                        payload_json,
-                        session.trace_head_sha256,
-                        current_sha256,
-                    ),
-                )
-                updated = connection.execute(
-                    """
-                    UPDATE sessions
-                    SET updated_at = ?,
-                        event_count = ?,
-                        next_sequence = ?,
-                        trace_head_sha256 = ?
-                    WHERE session_id = ?
-                      AND event_count = ?
-                      AND next_sequence = ?
-                      AND trace_head_sha256 = ?
-                    """,
-                    (
-                        cast(str, payload["timestamp"]),
-                        session.event_count + 1,
-                        session.next_sequence + 1,
-                        current_sha256,
-                        self._session_id,
-                        session.event_count,
-                        session.next_sequence,
-                        session.trace_head_sha256,
-                    ),
-                )
-                if updated.rowcount != 1:
-                    raise _trace_corrupt()
+                if appended is None:
+                    connection.rollback()
+                    return
                 connection.commit()
             except PersistenceError:
                 _rollback(connection)
@@ -146,6 +68,105 @@ class SessionEventJournal:
                     PersistenceErrorCode.STORAGE_FAILED,
                     "Trace event could not be persisted.",
                 ) from None
+
+
+def append_event_in_transaction(
+    connection: sqlite3.Connection,
+    limits: SessionTraceLimits,
+    session_id: str,
+    event: AgentEvent,
+    payload: dict[str, object],
+    payload_json: str,
+) -> tuple[int, str] | None:
+    session = _load_session(connection, session_id)
+    duplicate = connection.execute(
+        """
+        SELECT session_id, payload_json
+        FROM trace_events
+        WHERE event_id = ?
+        """,
+        (event.event_id,),
+    ).fetchone()
+    if duplicate is not None:
+        if (
+            str(duplicate["session_id"]) == session_id
+            and str(duplicate["payload_json"]) == payload_json
+        ):
+            return None
+        raise PersistenceError(
+            PersistenceErrorCode.EVENT_CONFLICT,
+            "Trace event identifier conflicts with stored data.",
+        )
+    if session.event_count >= limits.max_events_per_session:
+        raise PersistenceError(
+            PersistenceErrorCode.LIMIT_EXCEEDED,
+            "Session trace reached the configured event limit.",
+        )
+    _validate_trace_head(connection, session)
+    _validate_event_time(session, event.timestamp)
+    _apply_projection(connection, session_id, session, event)
+
+    sequence = session.next_sequence
+    current_sha256 = event_sha256(
+        session_id=session_id,
+        sequence=sequence,
+        previous_sha256=session.trace_head_sha256,
+        event_payload=payload,
+    )
+    connection.execute(
+        """
+        INSERT INTO trace_events (
+            session_id,
+            sequence,
+            schema_version,
+            run_id,
+            event_id,
+            event_type,
+            event_timestamp,
+            payload_json,
+            previous_sha256,
+            event_sha256
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        """,
+        (
+            session_id,
+            sequence,
+            TRACE_SCHEMA_VERSION,
+            event.run_id,
+            event.event_id,
+            event.type,
+            cast(str, payload["timestamp"]),
+            payload_json,
+            session.trace_head_sha256,
+            current_sha256,
+        ),
+    )
+    updated = connection.execute(
+        """
+        UPDATE sessions
+        SET updated_at = ?,
+            event_count = ?,
+            next_sequence = ?,
+            trace_head_sha256 = ?
+        WHERE session_id = ?
+          AND event_count = ?
+          AND next_sequence = ?
+          AND trace_head_sha256 = ?
+        """,
+        (
+            cast(str, payload["timestamp"]),
+            session.event_count + 1,
+            session.next_sequence + 1,
+            current_sha256,
+            session_id,
+            session.event_count,
+            session.next_sequence,
+            session.trace_head_sha256,
+        ),
+    )
+    if updated.rowcount != 1:
+        raise _trace_corrupt()
+    return sequence, current_sha256
 
 
 def _load_session(
