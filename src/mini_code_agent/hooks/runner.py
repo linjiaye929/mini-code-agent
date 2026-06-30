@@ -190,10 +190,7 @@ class ToolHookRunner:
                 started,
                 failure_code=failure_code,
             )
-            try:
-                self._audit.publish(record)
-            except Exception:
-                continue
+            self._publish_post(record)
 
     def _record(
         self,
@@ -218,6 +215,13 @@ class ToolHookRunner:
         )
 
     def _publish_pre(self, record: HookAuditRecord) -> bool:
+        try:
+            self._audit.publish(record)
+        except Exception:
+            return False
+        return True
+
+    def _publish_post(self, record: HookAuditRecord) -> bool:
         try:
             self._audit.publish(record)
         except Exception:

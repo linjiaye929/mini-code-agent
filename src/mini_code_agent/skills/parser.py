@@ -106,7 +106,8 @@ def parse_skill_document(
         raise SkillParseError(SkillIssueCode.INVALID_BODY)
 
     try:
-        candidate = yaml.load(frontmatter, Loader=_StrictSafeLoader)
+        # The custom loader subclasses SafeLoader and further rejects aliases/duplicate keys.
+        candidate = yaml.load(frontmatter, Loader=_StrictSafeLoader)  # nosec B506
     except yaml.YAMLError:
         raise SkillParseError(SkillIssueCode.INVALID_FRONTMATTER) from None
     if not isinstance(candidate, dict) or not all(isinstance(key, str) for key in candidate):
