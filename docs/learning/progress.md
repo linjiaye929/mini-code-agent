@@ -14,7 +14,7 @@
 | L9 Skills and Hooks | Not started | |
 | L10 MCP | Not started | |
 | L11 Subagent and Worktree | Not started | |
-| L12 CI, benchmark and release | In progress | v0.10 GitHub prerelease and Windows/Linux CI succeeded; benchmark pending |
+| L12 CI, benchmark and release | In progress | v0.11 GitHub prerelease and Windows/Linux CI succeeded; benchmark pending |
 
 ## L0 Notes
 
@@ -531,5 +531,9 @@
 - Initial remote run `28442095039` exposed two Linux assumptions: resolving a POSIX venv executable
   erased environment identity, and opening a directory failed before `fstat`. Both received
   focused fixes and regression coverage.
-- GitHub Actions run `28442443209` then passed quality plus Ubuntu/Windows on Python 3.12/3.13.
-  GitHub prerelease evidence is recorded after tag and artifact publication.
+- GitHub Actions runs `28442443209` and final merged-main run `28442701360` passed quality plus
+  Ubuntu/Windows on Python 3.12/3.13.
+- Annotated tag `v0.11.0-alpha.0` targets commit
+  `575ecb8f3a73eadb9598b1eda2e52fdfadcde56e`. The verified GitHub prerelease is
+  <https://github.com/linjiayebat/mini-code-agent/releases/tag/v0.11.0-alpha.0>; its uploaded wheel
+  and sdist SHA-256 digests match the locally smoke-tested artifacts listed above.

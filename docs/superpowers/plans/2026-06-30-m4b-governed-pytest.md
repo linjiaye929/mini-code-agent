@@ -387,7 +387,7 @@ Ruff, strict Pyright, Bandit, and dependency audit report no failures.
 Build wheel and sdist with hashes, install each artifact separately on Python 3.12 and 3.13, run
 `tests/smoke_test.py`, and verify `mini-code-agent --version` reports `0.11.0a0`.
 
-- [ ] **Step 6: Complete plan, commit, merge, tag, and publish**
+- [x] **Step 6: Complete plan, commit, merge, tag, and publish**
 
 Mark every completed checkbox, commit release evidence, fast-forward merge to `main`, rerun merged
 verification, tag `v0.11.0-alpha.0`, push `main` and the tag, create a GitHub prerelease with wheel
