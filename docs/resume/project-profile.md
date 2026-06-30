@@ -5,8 +5,9 @@
 > 、M3b 版本化 Session/追加式 Trace、M3c Checkpoint/Resume、M4a hardened 只读 Git
 > 、M4b 受治理 Pytest 诊断、M4c 宿主控制的有限 Repair 及 M5a 惰性 Skills/Tool Hooks
 > 已完成；Shell 字符串、项目可执行 Hook、OS 沙箱、MCP、自动 Repair Resume 和真实凭证
-> 联调尚未实现。`v0.12.0-alpha.0` GitHub prerelease 已发布；M5a 本地双 Python、90.86%
-> 分支覆盖率、安全审计和四组制品 smoke 已通过，v0.13 远程 CI/Release 证据待回填。
+> 联调尚未实现。`v0.13.0-alpha.0` GitHub prerelease 已发布；本地双 Python 各 867
+> passed、90.86% 分支覆盖率、安全审计和四组制品 smoke 已通过，PR/main 的
+> Ubuntu/Windows × Python 3.12/3.13 CI 全部成功，远端制品摘要与本地一致。
 > 本地与 Ubuntu/Windows × Python 3.12/3.13 远程 CI 已成功，wheel 与 sdist 已完成四组
 > 隔离安装 smoke，远端 asset digest 与本地摘要一致。
 >
@@ -97,7 +98,7 @@ Pyright；其余技术随对应里程碑落地。
 | 只读 Git 证据 | Agent 修改前后需要可靠识别用户已有变更，但普通 Git 配置可在 status/diff 中执行 fsmonitor、external diff 或 textconv | argv-only Git CLI、`--porcelain=v2 -z` 解析、exact top-level、`--no-optional-locks`、禁用 fsmonitor/ext-diff/textconv/submodule、联合输出/时间/条目/patch 上限、canonical SHA-256 | `git_status` 返回 typed branch/XY/rename/conflict/untracked；`git_diff` 返回 staged/unstaged patch | 避免 locale 文本误解析、父仓库越界、配置驱动代码执行、可选 index 写入和误将截断 patch 当完整证据 | 27 项 Git 单测、4 项 Tool 单测、1 项真实 Agent 集成；恶意扩展零执行，status/diff 前后 index 字节与纳秒 mtime 不变 |
 | 受治理 Pytest 诊断 | 文件写完不等于任务完成，但直接开放测试命令会引入任意 argv、插件和项目代码执行风险 | fixed `PytestProfile`、`python -I -B`、禁用 ambient plugin/cache、Workspace target、execute 默认 deny/独立审批、进程预算、`defusedxml` bounded JUnit parser、process/report 双状态 | 模型只选测试文件/目录；批准后运行真实 Pytest，返回 exit 分类、计数和有界 failure/error diagnostics，并在所有路径清理报告 | 将脆弱终端文本解析改为机器协议；区分测试失败、runner 失败、无测试和报告损坏；阻止模型控制解释器/参数/插件 | 95 项新增测试使全套达到 678 passed；真实 deny/approve/reject/non-interactive/Agent+Trace 集成通过；Python 3.12/3.13 各通过，90.25% 分支覆盖率，四组 artifact smoke |
 | 宿主控制的有限 Repair Loop | 诊断可用后，若让模型自行决定改什么、何时测试和是否重试，会形成无界反馈、覆盖用户改动或用文字冒充成功 | 独立 `RepairRuntime`、clean repository、literal exact tracked scope、pre-policy `RepairActionGuard`、固定 Pytest、Git/Workspace 前后证据、canonical failure fingerprint、attempt/time/patch/prompt/repeated-failure 预算、SQLite schema v3 Repair hash chain | 先跑 baseline；每轮只允许一次 Agent read/edit；宿主验证 patch 和测试无副作用后重测，只在完整 passing evidence 下成功，否则以 typed reason 停止 | 阻止 scope 外写入、execute/network、自声明成功、staged/untracked/ignored/submodule/branch 漂移、重复失败和测试残留修改；中断会话不自动重放 | 真实集成覆盖一次缺陷修复、越权写入在审批/落盘前拒绝、dirty repo 在 Provider/Pytest 前拒绝、测试修改仓库即使通过也停止；Python 3.12/3.13 本地各 798 passed、6 个 Windows symlink 条件跳过，3.13 分支覆盖率 90.88%；未虚构 benchmark 提升率 |
-| 惰性 Skills 与单调授权 Hooks | 仓库扩展既会占用上下文，也可能通过静默覆盖、动态导入或生命周期回调绕过权限 | restricted PyYAML/Pydantic、direct-child regular-file/reparse 检查、source-qualified ID、SHA-256 + file identity TOCTOU 重验、只读 list/load Tool、async Protocol Hook、稳定优先级、timeout、bounded audit | 模型先发现 metadata，再按 fingerprint 加载 labelled untrusted Markdown；宿主 pre-Hook 可 veto，post-Hook 可观察 | 阻止 Skill 注册执行能力、跨来源 shadow、内容漂移、无界扫描和 Hook 提权；pre 失败在副作用前关闭，post 失败不伪造执行事实 | 单元覆盖 YAML/路径/冲突/漂移/排序/超时/取消/审计；真实 Agent 证明恶意 Skill 不能绕过 deny、pre 阻断零落盘、post 失败后结果与后续 observer 保留；Python 3.12/3.13 各 867 passed、90.86% 分支覆盖率，远程 CI/Release 待回填 |
+| 惰性 Skills 与单调授权 Hooks | 仓库扩展既会占用上下文，也可能通过静默覆盖、动态导入或生命周期回调绕过权限 | restricted PyYAML/Pydantic、direct-child regular-file/reparse 检查、source-qualified ID、SHA-256 + file identity TOCTOU 重验、只读 list/load Tool、async Protocol Hook、稳定优先级、timeout、bounded audit | 模型先发现 metadata，再按 fingerprint 加载 labelled untrusted Markdown；宿主 pre-Hook 可 veto，post-Hook 可观察 | 阻止 Skill 注册执行能力、跨来源 shadow、内容漂移、无界扫描和 Hook 提权；pre 失败在副作用前关闭，post 失败不伪造执行事实 | 真实 Agent 证明恶意 Skill 不能绕过 deny、pre 阻断零落盘、post 失败后结果与后续 observer 保留；Python 3.12/3.13 各 867 passed、90.86% 分支覆盖率；PR/main 五 job CI、v0.13 prerelease 与远端制品摘要验证通过 |
 | 质量门禁 | 企业级项目需要稳定接口和回归保护 | Ruff、严格 Pyright、Pytest、85% 核心覆盖率门槛、哈希构建约束、CI、SemVer | 自动执行 lint、类型检查、测试、构建和安装验证 | 防止低质量变更进入发布版本 | v0.12：Python 3.12/3.13 本地各 798 通过、6 项 symlink 条件跳过，90.88% 分支覆盖率，Bandit/pip-audit 与四组 artifact smoke 通过；PR/main CI 的 Ubuntu/Windows × 3.12/3.13 与 quality 全成功，prerelease 及两个校验摘要一致的制品已发布 |
 | 可扩展 Harness | Skills、Hooks、MCP、Subagent 会增加控制流复杂度 | 稳定 Protocol、EventBus、能力声明、依赖倒置 | 在不侵入 Agent Core 的前提下增加能力 | 避免扩展绕过权限、Trace 和 Session | 插件合约测试；扩展数量后续回填 |
 

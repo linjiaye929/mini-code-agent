@@ -2,7 +2,7 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development
 > (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use
-> checkbox (`- [ ]`) syntax for tracking.
+> checkbox (`- [x]`) syntax for tracking.
 
 **Goal:** Add deterministic host-registered pre/post Tool Hooks that can block actions or observe
 results without granting permissions, replacing results, or destabilizing the core Agent loop.
@@ -49,7 +49,7 @@ existing Tool/Policy contracts, Pytest, pytest-asyncio, Ruff, strict Pyright.
 - Create: `src/mini_code_agent/hooks/models.py`
 - Create: `tests/unit/hooks/test_hook_models.py`
 
-- [ ] **Step 1: Write failing model tests**
+- [x] **Step 1: Write failing model tests**
 
 Cover ID/source/priority bounds, immutable Tool contexts, valid decisions, elapsed limits, and
 audit serialization that omits arguments, results, previews, and exception text:
@@ -70,13 +70,13 @@ def test_audit_record_contains_only_bounded_metadata() -> None:
     assert "result" not in payload
 ```
 
-- [ ] **Step 2: Run tests and verify collection fails**
+- [x] **Step 2: Run tests and verify collection fails**
 
 Run: `uv run pytest tests/unit/hooks/test_hook_models.py -q`
 
 Expected: FAIL because `mini_code_agent.hooks.models` does not exist.
 
-- [ ] **Step 3: Implement immutable models**
+- [x] **Step 3: Implement immutable models**
 
 Define:
 
@@ -107,13 +107,13 @@ class PreToolHookResult(BaseModel):
 Add frozen `ToolHookContext`, `PostToolHookContext`, and `HookAuditRecord`. Contexts hold existing
 frozen domain models and are never serialized to the model.
 
-- [ ] **Step 4: Run focused tests**
+- [x] **Step 4: Run focused tests**
 
 Run: `uv run pytest tests/unit/hooks/test_hook_models.py -q`
 
 Expected: PASS.
 
-- [ ] **Step 5: Commit contracts**
+- [x] **Step 5: Commit contracts**
 
 ```powershell
 git add src/mini_code_agent/hooks/models.py tests/unit/hooks/test_hook_models.py
@@ -126,7 +126,7 @@ git commit -m "feat: define governed hook contracts"
 - Create: `src/mini_code_agent/hooks/runner.py`
 - Create: `tests/unit/hooks/test_hook_runner.py`
 
-- [ ] **Step 1: Write failing runner tests**
+- [x] **Step 1: Write failing runner tests**
 
 Test registration bounds, duplicate IDs across phases, `(priority, id)` order, continue chain,
 first block, exception, timeout, malformed result, audit failure, post failure continuation, and
@@ -148,13 +148,13 @@ async def test_pre_hooks_run_by_priority_then_id_and_stop_on_block() -> None:
     assert result.allowed is False
 ```
 
-- [ ] **Step 2: Run tests and verify failure**
+- [x] **Step 2: Run tests and verify failure**
 
 Run: `uv run pytest tests/unit/hooks/test_hook_runner.py -q`
 
 Expected: FAIL because the runner is absent.
 
-- [ ] **Step 3: Implement protocols, registrations, and sinks**
+- [x] **Step 3: Implement protocols, registrations, and sinks**
 
 Implement:
 
@@ -185,13 +185,13 @@ Validate IDs with the same lowercase identifier policy used by other extension c
 registrations to 64 and per-Hook timeout to `0.01..30` seconds. Use `time.monotonic_ns` injected
 for deterministic elapsed tests. Add `NullHookAuditSink` and `RecordingHookAuditSink`.
 
-- [ ] **Step 4: Enforce phase-specific failure behavior**
+- [x] **Step 4: Enforce phase-specific failure behavior**
 
 For pre-Hooks, timeout/exception/malformed result/audit failure returns a static blocked
 `HookGateResult`; cancellation propagates. For post-Hooks, record failure when possible, continue
 to later Hooks, never alter the Tool result, and propagate cancellation.
 
-- [ ] **Step 5: Run runner and static tests**
+- [x] **Step 5: Run runner and static tests**
 
 Run:
 
@@ -202,7 +202,7 @@ uv run pyright src/mini_code_agent/hooks/runner.py tests/unit/hooks/test_hook_ru
 
 Expected: PASS.
 
-- [ ] **Step 6: Commit the runner**
+- [x] **Step 6: Commit the runner**
 
 ```powershell
 git add src/mini_code_agent/hooks/runner.py tests/unit/hooks/test_hook_runner.py
@@ -215,7 +215,7 @@ git commit -m "feat: run bounded tool hooks"
 - Modify: `src/mini_code_agent/policy/executor.py`
 - Modify: `tests/unit/policy/test_executor.py`
 
-- [ ] **Step 1: Write failing executor lifecycle tests**
+- [x] **Step 1: Write failing executor lifecycle tests**
 
 Add recording ActionGuard, Hooks, Policy, approval, and Tool dependencies. Assert exact order and
 negative authority:
@@ -237,13 +237,13 @@ async def test_hook_continue_cannot_bypass_policy_deny() -> None:
 Also test block-before-approval, pre failure, post observation of success/error, unchanged result
 identity, and cancellation.
 
-- [ ] **Step 2: Run focused tests and verify failure**
+- [x] **Step 2: Run focused tests and verify failure**
 
 Run: `uv run pytest tests/unit/policy/test_executor.py -q -k hook`
 
 Expected: FAIL because `GovernedToolExecutor` has no Hook boundary.
 
-- [ ] **Step 3: Add the optional Hook runner**
+- [x] **Step 3: Add the optional Hook runner**
 
 Accept `hooks: ToolHookRunner | None = None`. After ActionGuard success, construct
 `ToolHookContext` from the validated call, definition, preview, session mode, and trust source.
@@ -253,7 +253,7 @@ After `registry.execute`, pass the original result to `PostToolHookContext`, awa
 then return the same result object. Do not invoke post-Hooks for validation, preview, guard,
 pre-Hook, Policy, or approval denials.
 
-- [ ] **Step 4: Run executor regression**
+- [x] **Step 4: Run executor regression**
 
 Run:
 
@@ -264,7 +264,7 @@ uv run pyright src/mini_code_agent/policy/executor.py tests/unit/policy/test_exe
 
 Expected: all old and new tests pass.
 
-- [ ] **Step 5: Commit integration**
+- [x] **Step 5: Commit integration**
 
 ```powershell
 git add src/mini_code_agent/policy/executor.py tests/unit/policy/test_executor.py
@@ -278,7 +278,7 @@ git commit -m "feat: enforce governed tool hooks"
 - Create: `src/mini_code_agent/hooks/__init__.py`
 - Modify: `tests/smoke_test.py`
 
-- [ ] **Step 1: Write end-to-end tests**
+- [x] **Step 1: Write end-to-end tests**
 
 Compose `AgentRuntime`, `FakeProvider`, a real governed write/read Tool set, Policy, and Hooks:
 
@@ -288,7 +288,7 @@ Compose `AgentRuntime`, `FakeProvider`, a real governed write/read Tool set, Pol
 - a failing post-Hook does not change the Tool result or stop a later observer;
 - stable public exports import from the package root.
 
-- [ ] **Step 2: Run integration and smoke tests**
+- [x] **Step 2: Run integration and smoke tests**
 
 Run:
 
@@ -298,7 +298,7 @@ uv run pytest tests/integration/test_governed_tool_hooks_agent.py tests/smoke_te
 
 Expected: PASS.
 
-- [ ] **Step 3: Run combined Skills/Hooks regression**
+- [x] **Step 3: Run combined Skills/Hooks regression**
 
 Run:
 
@@ -311,7 +311,7 @@ uv run pyright
 
 Expected: all pass.
 
-- [ ] **Step 4: Commit integration evidence**
+- [x] **Step 4: Commit integration evidence**
 
 ```powershell
 git add src/mini_code_agent/hooks/__init__.py tests/integration/test_governed_tool_hooks_agent.py tests/smoke_test.py
@@ -328,13 +328,13 @@ git commit -m "test: prove governed hook lifecycle"
 - Modify: `README.md`
 - Modify: `SECURITY.md`
 
-- [ ] **Step 1: Write architecture and ADR**
+- [x] **Step 1: Write architecture and ADR**
 
 Document the Skill discovery/load data flow, source qualification, TOCTOU revalidation, Hook
 ordering, monotonic authorization, failure table, composition example, and every M5a non-claim.
 The ADR must record why arbitrary command/dynamic-import Hooks are deferred.
 
-- [ ] **Step 2: Expand L9 learning notes**
+- [x] **Step 2: Expand L9 learning notes**
 
 Add:
 
@@ -346,7 +346,7 @@ Add:
   code;
 - code-reading order and at least six exercises tied to exact M5a modules.
 
-- [ ] **Step 3: Add the resume highlight**
+- [x] **Step 3: Add the resume highlight**
 
 Use the established structure:
 
@@ -362,13 +362,13 @@ Problem solved: extension prompt injection cannot directly register capabilities
 Evidence: focused unit/integration tests and exact release run IDs.
 ```
 
-- [ ] **Step 4: Update README and security model**
+- [x] **Step 4: Update README and security model**
 
 Describe M5a as bounded alpha functionality. State explicitly that Skills are untrusted data,
 in-process Hooks are host-trusted, and there is no safe execution of repository Hook code or OS
 sandbox.
 
-- [ ] **Step 5: Verify docs and commit**
+- [x] **Step 5: Verify docs and commit**
 
 Run:
 
@@ -392,16 +392,16 @@ git commit -m "docs: explain governed extension boundaries"
 - Modify: `CHANGELOG.md`
 - Modify: `docs/learning/progress.md`
 
-- [ ] **Step 1: Set package version**
+- [x] **Step 1: Set package version**
 
 Set `project.version = "0.13.0a0"` and run `uv lock`.
 
-- [ ] **Step 2: Add changelog and provisional progress evidence**
+- [x] **Step 2: Add changelog and provisional progress evidence**
 
 Record Skills/Hooks behavior, security boundaries, migration impact, test inventory, and pending
 remote release evidence. Do not claim a GitHub run or artifact hash before it exists.
 
-- [ ] **Step 3: Run all local release gates on Python 3.12**
+- [x] **Step 3: Run all local release gates on Python 3.12**
 
 Run:
 
@@ -418,7 +418,7 @@ uv build
 
 Expected: all pass, coverage at least 85%, wheel and sdist built.
 
-- [ ] **Step 4: Run the full suite on Python 3.13**
+- [x] **Step 4: Run the full suite on Python 3.13**
 
 Run:
 
@@ -428,7 +428,7 @@ uv run --python 3.13 pytest --cov=mini_code_agent --cov-branch --cov-report=term
 
 Expected: all tests pass and coverage remains at least 85%.
 
-- [ ] **Step 5: Smoke-test installed wheel and sdist**
+- [x] **Step 5: Smoke-test installed wheel and sdist**
 
 Create isolated temporary Python 3.12 and 3.13 environments. Install each artifact without the
 source tree on `sys.path`, import `SkillCatalog` and `ToolHookRunner`, and run
@@ -436,7 +436,7 @@ source tree on `sys.path`, import `SkillCatalog` and `ToolHookRunner`, and run
 
 Expected: all four artifact/interpreter combinations pass.
 
-- [ ] **Step 6: Commit release preparation**
+- [x] **Step 6: Commit release preparation**
 
 ```powershell
 git add pyproject.toml uv.lock CHANGELOG.md docs/learning/progress.md
@@ -450,27 +450,27 @@ git commit -m "docs: prepare 0.13 alpha release"
 - Modify after release: `docs/learning/progress.md`
 - Modify after release when needed: `docs/resume/project-profile.md`
 
-- [ ] **Step 1: Run final diff and security review**
+- [x] **Step 1: Run final diff and security review**
 
 Verify no Skill path/content leak, executable project extension, silent precedence, Hook
 authorization grant, Hook result replacement, unbounded timeout/count, cancellation swallowing,
 or unsupported sandbox claim.
 
-- [ ] **Step 2: Push the feature branch and require GitHub CI**
+- [x] **Step 2: Push the feature branch and require GitHub CI**
 
 Push `codex/m5a-skills-hooks`, open a PR, and wait for every Windows/Linux Python 3.12/3.13,
 security, and package job to pass.
 
-- [ ] **Step 3: Merge only the reviewed green commit**
+- [x] **Step 3: Merge only the reviewed green commit**
 
 Merge the PR, update local `main`, and verify the merge commit and remote branch state.
 
-- [ ] **Step 4: Tag and create the prerelease**
+- [x] **Step 4: Tag and create the prerelease**
 
 Create annotated tag `v0.13.0-alpha.0` on the reviewed release-code commit. Create a GitHub
 prerelease and upload the exact locally verified wheel and sdist.
 
-- [ ] **Step 5: Verify remote release evidence**
+- [x] **Step 5: Verify remote release evidence**
 
 Verify:
 
@@ -479,13 +479,13 @@ Verify:
 - remote asset names, sizes, and SHA-256 hashes equal local artifacts;
 - final `main` GitHub Actions run passes all jobs.
 
-- [ ] **Step 6: Record immutable evidence**
+- [x] **Step 6: Record immutable evidence**
 
 Replace provisional progress entries with the commit SHA, PR URL, workflow run IDs, test counts,
 coverage, tag, release URL, asset sizes, and SHA-256 values. Update resume evidence only with
 facts supported by code and CI.
 
-- [ ] **Step 7: Commit and push evidence**
+- [x] **Step 7: Commit and push evidence**
 
 ```powershell
 git add docs/learning/progress.md docs/resume/project-profile.md
@@ -493,7 +493,7 @@ git commit -m "docs: record 0.13 release evidence"
 git push origin main
 ```
 
-- [ ] **Step 8: Confirm final repository state**
+- [x] **Step 8: Confirm final repository state**
 
 Run:
 

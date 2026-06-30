@@ -638,4 +638,9 @@
   `b751e177b9827538400ab68f0922c323857c8d7ba65f551a32baafb455264e71`。
 - 上述 exact wheel/sdist 在 Python 3.12/3.13 的四组隔离环境中均通过 console-script
   smoke，并验证 `SkillCatalog` 与 `ToolHookRunner` 可从安装包导入。
-- GitHub CI、tag、prerelease 和远端 asset digest 尚未发生，必须在远程验证后回填。
+- PR #3 <https://github.com/linjiayebat/mini-code-agent/pull/3> 的 CI run `28470334222`
+  以及合并提交 `f4f8dcb5864147214f4a9d2d3030c5af8bfec7b5` 的 main CI run
+  `28470432091` 均通过 quality、Ubuntu/Windows × Python 3.12/3.13 五个 job。
+- Annotated tag `v0.13.0-alpha.0` 解引用到上述合并提交。非 draft GitHub prerelease
+  <https://github.com/linjiayebat/mini-code-agent/releases/tag/v0.13.0-alpha.0> 已发布；
+  远端 wheel/sdist 的名称、大小和 SHA-256 digest 与本地四组 smoke 制品完全一致。

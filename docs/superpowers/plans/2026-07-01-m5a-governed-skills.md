@@ -2,7 +2,7 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development
 > (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use
-> checkbox (`- [ ]`) syntax for tracking.
+> checkbox (`- [x]`) syntax for tracking.
 
 **Goal:** Discover bounded source-qualified `SKILL.md` files, expose metadata without bodies, and
 load revalidated untrusted Markdown through two read-only Agent tools.
@@ -45,7 +45,7 @@ existing Tool Registry, Pytest, Ruff, strict Pyright.
 - Create: `src/mini_code_agent/skills/models.py`
 - Create: `tests/unit/skills/test_skill_models.py`
 
-- [ ] **Step 1: Write failing model tests**
+- [x] **Step 1: Write failing model tests**
 
 Cover source-to-trust derivation, qualified identity, exact metadata fields, semantic versions,
 descriptor bounds, issue privacy, report uniqueness, and frozen collections:
@@ -69,13 +69,13 @@ def test_metadata_rejects_unknown_fields_and_non_semver() -> None:
         )
 ```
 
-- [ ] **Step 2: Run tests and verify collection fails**
+- [x] **Step 2: Run tests and verify collection fails**
 
 Run: `uv run pytest tests/unit/skills/test_skill_models.py -q`
 
 Expected: FAIL because `mini_code_agent.skills.models` does not exist.
 
-- [ ] **Step 3: Implement immutable contracts**
+- [x] **Step 3: Implement immutable contracts**
 
 Implement these public shapes with `extra="forbid"` and `frozen=True`:
 
@@ -102,13 +102,13 @@ class SkillMetadata(BaseModel):
 Add `SkillRoot`, `SkillDescriptor`, `LoadedSkill`, `SkillIssueCode`, `SkillIssue`, and
 `SkillDiscoveryReport`. Derive trust in host code; never accept it from YAML.
 
-- [ ] **Step 4: Run focused tests**
+- [x] **Step 4: Run focused tests**
 
 Run: `uv run pytest tests/unit/skills/test_skill_models.py -q`
 
 Expected: PASS.
 
-- [ ] **Step 5: Commit contracts**
+- [x] **Step 5: Commit contracts**
 
 ```powershell
 git add src/mini_code_agent/skills/models.py tests/unit/skills/test_skill_models.py
@@ -123,7 +123,7 @@ git commit -m "feat: define governed skill contracts"
 - Create: `src/mini_code_agent/skills/parser.py`
 - Create: `tests/unit/skills/test_parser.py`
 
-- [ ] **Step 1: Add parser dependency and refresh the lock**
+- [x] **Step 1: Add parser dependency and refresh the lock**
 
 Add:
 
@@ -144,7 +144,7 @@ Run: `uv lock`
 
 Expected: lock succeeds with PyYAML and its stubs.
 
-- [ ] **Step 2: Write failing parser tests**
+- [x] **Step 2: Write failing parser tests**
 
 Test valid LF/CRLF input and reject BOM, invalid UTF-8, missing delimiters, empty body, excessive
 frontmatter/body/file sizes, duplicate keys, aliases, custom tags, non-mapping YAML, unknown
@@ -161,13 +161,13 @@ def test_parser_rejects_duplicate_yaml_keys() -> None:
     assert caught.value.code is SkillIssueCode.INVALID_FRONTMATTER
 ```
 
-- [ ] **Step 3: Run tests and verify failure**
+- [x] **Step 3: Run tests and verify failure**
 
 Run: `uv run pytest tests/unit/skills/test_parser.py -q`
 
 Expected: FAIL because the parser is absent.
 
-- [ ] **Step 4: Implement restricted YAML and parser**
+- [x] **Step 4: Implement restricted YAML and parser**
 
 Use a `yaml.SafeLoader` subclass. Override `compose_node` to reject aliases before construction
 and install a mapping constructor that rejects duplicate and non-string keys. Expose:
@@ -196,7 +196,7 @@ def parse_skill_document(
 
 Never include parser/YAML exception text in `SkillParseError`.
 
-- [ ] **Step 5: Run parser and dependency checks**
+- [x] **Step 5: Run parser and dependency checks**
 
 Run:
 
@@ -207,7 +207,7 @@ uv run pyright src/mini_code_agent/skills/parser.py tests/unit/skills/test_parse
 
 Expected: both pass.
 
-- [ ] **Step 6: Commit the parser**
+- [x] **Step 6: Commit the parser**
 
 ```powershell
 git add pyproject.toml uv.lock src/mini_code_agent/skills/parser.py tests/unit/skills/test_parser.py
@@ -220,7 +220,7 @@ git commit -m "feat: parse bounded skill documents"
 - Create: `src/mini_code_agent/skills/catalog.py`
 - Create: `tests/unit/skills/test_catalog.py`
 
-- [ ] **Step 1: Write failing discovery tests**
+- [x] **Step 1: Write failing discovery tests**
 
 Use temporary roots to test direct-child discovery, deterministic ordering, source-qualified
 coexistence, same-source conflict quarantine, malformed entry quarantine, unsafe root rejection,
@@ -245,13 +245,13 @@ def test_cross_source_names_coexist_without_shadowing(tmp_path: Path) -> None:
 On Windows, create symlinks only when supported and mark capability-dependent assertions with a
 skip reason. Also detect reparse points through `st_file_attributes`.
 
-- [ ] **Step 2: Run tests and verify failure**
+- [x] **Step 2: Run tests and verify failure**
 
 Run: `uv run pytest tests/unit/skills/test_catalog.py -q`
 
 Expected: FAIL because `SkillCatalog` does not exist.
 
-- [ ] **Step 3: Implement path-chain validation and discovery**
+- [x] **Step 3: Implement path-chain validation and discovery**
 
 Implement:
 
@@ -278,7 +278,7 @@ non-directory/non-regular objects. Keep absolute `Path` values only in private c
 Sort by source, name, and root ID before conflict processing so filesystem iteration order cannot
 change results.
 
-- [ ] **Step 4: Run catalog tests on the current platform**
+- [x] **Step 4: Run catalog tests on the current platform**
 
 Run:
 
@@ -289,7 +289,7 @@ uv run pyright src/mini_code_agent/skills/catalog.py tests/unit/skills/test_cata
 
 Expected: pass, with only explicit platform capability skips.
 
-- [ ] **Step 5: Commit discovery**
+- [x] **Step 5: Commit discovery**
 
 ```powershell
 git add src/mini_code_agent/skills/catalog.py tests/unit/skills/test_catalog.py
@@ -302,7 +302,7 @@ git commit -m "feat: discover provenance-aware skills"
 - Modify: `src/mini_code_agent/skills/catalog.py`
 - Modify: `tests/unit/skills/test_catalog.py`
 
-- [ ] **Step 1: Add failing load and drift tests**
+- [x] **Step 1: Add failing load and drift tests**
 
 Cover exact expected SHA, unknown/disabled/non-model-invocable IDs, metadata drift, body drift,
 file replacement, linked replacement, deleted file, and successful unchanged load:
@@ -318,13 +318,13 @@ def test_load_rejects_content_drift_until_rediscovery(tmp_path: Path) -> None:
     assert caught.value.code is SkillIssueCode.SKILL_CHANGED
 ```
 
-- [ ] **Step 2: Run the focused failure**
+- [x] **Step 2: Run the focused failure**
 
 Run: `uv run pytest tests/unit/skills/test_catalog.py -q -k load`
 
 Expected: FAIL because loading is absent.
 
-- [ ] **Step 3: Implement fail-closed loading**
+- [x] **Step 3: Implement fail-closed loading**
 
 Add:
 
@@ -340,13 +340,13 @@ Require the caller SHA to match the descriptor before filesystem work. Revalidat
 path chain, read no more than `max_file_bytes + 1`, parse again, and require metadata, byte count,
 and SHA to equal discovery. Return the preserved body only after all checks pass.
 
-- [ ] **Step 4: Run full catalog tests**
+- [x] **Step 4: Run full catalog tests**
 
 Run: `uv run pytest tests/unit/skills/test_catalog.py -q`
 
 Expected: PASS.
 
-- [ ] **Step 5: Commit lazy loading**
+- [x] **Step 5: Commit lazy loading**
 
 ```powershell
 git add src/mini_code_agent/skills/catalog.py tests/unit/skills/test_catalog.py
@@ -361,7 +361,7 @@ git commit -m "feat: revalidate skill content on load"
 - Create: `tests/unit/skills/test_tools.py`
 - Modify: `tests/smoke_test.py`
 
-- [ ] **Step 1: Write failing Tool tests**
+- [x] **Step 1: Write failing Tool tests**
 
 Verify exact JSON schemas, read-only side effects, metadata-only list output, fingerprint-required
 load, stable public errors, result provenance, model visibility, and no absolute path/body leak
@@ -384,19 +384,19 @@ async def test_load_tool_returns_labelled_untrusted_content(tmp_path: Path) -> N
     assert payload["content_type"] == "untrusted_markdown"
 ```
 
-- [ ] **Step 2: Run tests and verify failure**
+- [x] **Step 2: Run tests and verify failure**
 
 Run: `uv run pytest tests/unit/skills/test_tools.py tests/smoke_test.py -q`
 
 Expected: FAIL because the tools/public exports are absent.
 
-- [ ] **Step 3: Implement `ListSkillsTool` and `LoadSkillTool`**
+- [x] **Step 3: Implement `ListSkillsTool` and `LoadSkillTool`**
 
 Both definitions use `SideEffect.READ_ONLY`. Validate arguments again with small Pydantic request
 models inside each Tool even though `ToolRegistry` validates the published JSON Schema. Serialize
 with `ensure_ascii=True`, compact separators, sorted keys, and stable error envelopes.
 
-- [ ] **Step 4: Run Tool contract tests**
+- [x] **Step 4: Run Tool contract tests**
 
 Run:
 
@@ -407,7 +407,7 @@ uv run pyright src/mini_code_agent/skills tests/unit/skills
 
 Expected: PASS.
 
-- [ ] **Step 5: Commit the Tool API**
+- [x] **Step 5: Commit the Tool API**
 
 ```powershell
 git add src/mini_code_agent/skills tests/unit/skills/test_tools.py tests/smoke_test.py
@@ -419,7 +419,7 @@ git commit -m "feat: expose skills through read-only tools"
 **Files:**
 - Create: `tests/integration/test_governed_skills_agent.py`
 
-- [ ] **Step 1: Write the end-to-end tests**
+- [x] **Step 1: Write the end-to-end tests**
 
 Create a project Skill whose Markdown asks the model to write outside policy. Use `FakeProvider`
 responses to call `list_skills`, call `load_skill` with the observed hash, then attempt the
@@ -431,14 +431,14 @@ governed write. Assert:
 - no target file is created;
 - the run completes with correlated Tool results.
 
-- [ ] **Step 2: Run the integration test**
+- [x] **Step 2: Run the integration test**
 
 Run: `uv run pytest tests/integration/test_governed_skills_agent.py -q`
 
 Expected: PASS after composing the existing `AgentRuntime`, `FakeProvider`, `ToolRegistry`,
 `GovernedToolExecutor`, and a deny Policy rule.
 
-- [ ] **Step 3: Run Skills regression and static checks**
+- [x] **Step 3: Run Skills regression and static checks**
 
 Run:
 
@@ -451,7 +451,7 @@ uv run pyright
 
 Expected: all pass.
 
-- [ ] **Step 4: Commit integration evidence**
+- [x] **Step 4: Commit integration evidence**
 
 ```powershell
 git add tests/integration/test_governed_skills_agent.py
@@ -463,7 +463,7 @@ git commit -m "test: prove governed skill loading"
 **Files:**
 - Review all files changed by Tasks 1-6.
 
-- [ ] **Step 1: Run the full suite with branch coverage**
+- [x] **Step 1: Run the full suite with branch coverage**
 
 Run:
 
@@ -473,7 +473,7 @@ uv run pytest --cov=mini_code_agent --cov-branch --cov-report=term-missing
 
 Expected: all tests pass and total coverage is at least 85%.
 
-- [ ] **Step 2: Run security and package gates**
+- [x] **Step 2: Run security and package gates**
 
 Run:
 
@@ -486,7 +486,7 @@ uv build
 
 Expected: all commands pass.
 
-- [ ] **Step 3: Inspect the diff for contract leaks**
+- [x] **Step 3: Inspect the diff for contract leaks**
 
 Run:
 
@@ -497,6 +497,6 @@ git diff main...HEAD -- src/mini_code_agent/skills tests/unit/skills tests/integ
 
 Expected: no path, exception, body-listing, precedence, or executable-capability leak.
 
-- [ ] **Step 4: Record any review fixes as a focused commit**
+- [x] **Step 4: Record any review fixes as a focused commit**
 
 Use `fix: harden governed skills` only when review changes are required. Leave the branch clean.
