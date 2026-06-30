@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import asyncio
 import hashlib
 import sys
 from collections.abc import Iterable
@@ -21,6 +22,7 @@ from mini_code_agent.repair.approval import StaticRepairApprovalHandler
 from mini_code_agent.repair.events import RecordingRepairJournal, RepairEvent
 from mini_code_agent.repair.fingerprint import scope_sha256
 from mini_code_agent.repair.models import (
+    RepairLimits,
     RepairRequest,
     RepairStopReason,
     RepairWorkerRequest,
@@ -96,9 +98,35 @@ class RecordingTests:
         return ("python", "-I", "-m", "pytest", "--", *targets)
 
 
+class FileTypeMutatingTests(RecordingTests):
+    def __init__(
+        self,
+        root: Path,
+        results: Iterable[PytestRunResult],
+        *,
+        mutate_on_call: int,
+    ) -> None:
+        super().__init__(root, results)
+        self._root = root
+        self._mutate_on_call = mutate_on_call
+
+    async def run(self, targets: tuple[str, ...]) -> PytestRunResult:
+        result = await super().run(targets)
+        if len(self.calls) == self._mutate_on_call:
+            target = self._root / "src" / "app.py"
+            target.unlink()
+            target.mkdir()
+        return result
+
+
 class RecordingWorker:
-    def __init__(self, scope_sha256: str) -> None:
+    def __init__(
+        self,
+        scope_sha256: str,
+        responses: Iterable[AgentResult | BaseException] = (),
+    ) -> None:
         self._scope_sha256 = scope_sha256
+        self._responses = iter(responses)
         self.calls: list[RepairWorkerRequest] = []
 
     @property
@@ -107,7 +135,7 @@ class RecordingWorker:
 
     async def run(self, request: RepairWorkerRequest) -> AgentResult:
         self.calls.append(request)
-        return AgentResult(
+        default = AgentResult(
             run_id=f"{request.repair_id}-attempt-{request.attempt}",
             messages=(),
             stop_reason=StopReason.COMPLETED,
@@ -115,6 +143,10 @@ class RecordingWorker:
             tool_calls=1,
             usage=TokenUsage(),
         )
+        response = next(self._responses, default)
+        if isinstance(response, BaseException):
+            raise response
+        return response
 
 
 class FailingApproval:
@@ -130,6 +162,29 @@ class FailingJournal:
     def append(self, event: RepairEvent) -> None:
         self.calls.append(event)
         raise RuntimeError("secret journal failure")
+
+
+class FailingAtJournal(RecordingRepairJournal):
+    def __init__(self, fail_at: int) -> None:
+        super().__init__()
+        self._fail_at = fail_at
+        self._calls = 0
+
+    def append(self, event: RepairEvent) -> None:
+        self._calls += 1
+        if self._calls == self._fail_at:
+            raise RuntimeError("secret journal failure")
+        super().append(event)
+
+
+class SequenceClock:
+    def __init__(self, values: Iterable[float]) -> None:
+        self._values = iter(values)
+        self._last = 0.0
+
+    def __call__(self) -> float:
+        self._last = next(self._values, self._last)
+        return self._last
 
 
 def workspace(tmp_path: Path) -> WorkspaceBoundary:
@@ -637,3 +692,631 @@ async def test_baseline_test_repository_mutation_is_detected(
 
     assert result.stop_reason is RepairStopReason.TEST_MUTATED_REPOSITORY
     assert worker.calls == []
+
+
+def attempt_git(
+    root: Path,
+    *,
+    attempt_statuses: tuple[GitStatusSnapshot, ...],
+    attempt_diffs: tuple[GitDiffResult, ...],
+) -> RecordingGit:
+    statuses: list[GitStatusSnapshot] = [clean_status(), clean_status()]
+    staged: list[GitDiffResult] = [diff(mode=GitDiffMode.STAGED)]
+    unstaged: list[GitDiffResult] = [diff(), diff()]
+    for status, current_diff in zip(
+        attempt_statuses,
+        attempt_diffs,
+        strict=True,
+    ):
+        statuses.extend((status, status))
+        staged.append(diff(mode=GitDiffMode.STAGED))
+        unstaged.extend((current_diff, current_diff))
+    return RecordingGit(
+        root,
+        statuses=statuses,
+        staged_diffs=staged,
+        unstaged_diffs=unstaged,
+    )
+
+
+def worker_result(
+    *,
+    run_id: str = "repair-1-attempt-1",
+    reason: StopReason = StopReason.COMPLETED,
+) -> AgentResult:
+    return AgentResult(
+        run_id=run_id,
+        messages=(),
+        stop_reason=reason,
+        turns=1,
+        tool_calls=1,
+        usage=TokenUsage(),
+    )
+
+
+def changed_failure(message: str) -> PytestRunResult:
+    original = failed_tests()
+    diagnostic = original.diagnostics[0].model_copy(update={"message": message})
+    return original.model_copy(update={"diagnostics": (diagnostic,)})
+
+
+@pytest.mark.asyncio
+async def test_one_attempt_repair_succeeds_only_after_trusted_test_pass(
+    tmp_path: Path,
+) -> None:
+    boundary = workspace(tmp_path)
+    patch = diff("diff --git a/src/app.py b/src/app.py\n+value = 2\n")
+    status = make_status((ordinary(),))
+    git = attempt_git(
+        tmp_path,
+        attempt_statuses=(status,),
+        attempt_diffs=(patch,),
+    )
+    tests = RecordingTests(tmp_path, (failed_tests(), passed_tests()))
+    worker = RecordingWorker(scope_sha256(("src/app.py",)))
+    journal = RecordingRepairJournal()
+
+    result = await RepairRuntime(
+        boundary,
+        git,
+        tests,
+        worker,
+        StaticRepairApprovalHandler(approved=True),
+        journal=journal,
+    ).run(request())
+
+    assert result.stop_reason is RepairStopReason.REPAIRED
+    assert result.succeeded is True
+    assert len(result.attempts) == 1
+    assert result.attempts[0].patch_sha256 == patch.sha256
+    assert result.attempts[0].test.status is PytestExecutionStatus.PASSED
+    assert len(worker.calls) == 1
+    assert worker.calls[0].attempt == 1
+    assert worker.calls[0].last_test.status is PytestExecutionStatus.FAILED
+    assert tuple(event.type for event in journal.events) == (
+        "repair_started",
+        "repair_attempt_started",
+        "repair_verification_started",
+        "repair_attempt_completed",
+        "repair_stopped",
+    )
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    "response",
+    (
+        worker_result(reason=StopReason.MAX_TURNS),
+        RuntimeError("secret worker failure"),
+    ),
+)
+async def test_worker_failure_stops_before_git_verification(
+    tmp_path: Path,
+    response: AgentResult | BaseException,
+) -> None:
+    boundary = workspace(tmp_path)
+    git, tests = admitted_dependencies(tmp_path, (failed_tests(),))
+    worker = RecordingWorker(
+        scope_sha256(("src/app.py",)),
+        responses=(response,),
+    )
+
+    result = await RepairRuntime(
+        boundary,
+        git,
+        tests,
+        worker,
+        StaticRepairApprovalHandler(approved=True),
+        journal=RecordingRepairJournal(),
+    ).run(request())
+
+    assert result.stop_reason is RepairStopReason.WORKER_FAILED
+    assert git.status_calls == 2
+    assert tests.calls == [("tests",)]
+    assert "secret" not in (result.error or "")
+
+
+@pytest.mark.asyncio
+async def test_worker_without_new_diff_stops_no_progress(tmp_path: Path) -> None:
+    boundary = workspace(tmp_path)
+    git = attempt_git(
+        tmp_path,
+        attempt_statuses=(clean_status(),),
+        attempt_diffs=(diff(),),
+    )
+    tests = RecordingTests(tmp_path, (failed_tests(),))
+
+    result = await RepairRuntime(
+        boundary,
+        git,
+        tests,
+        RecordingWorker(scope_sha256(("src/app.py",))),
+        StaticRepairApprovalHandler(approved=True),
+        journal=RecordingRepairJournal(),
+    ).run(request())
+
+    assert result.stop_reason is RepairStopReason.NO_PROGRESS
+    assert tests.calls == [("tests",)]
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    "invalid_status",
+    (
+        make_status((ordinary(index_status="M"),)),
+        make_status(
+            (
+                GitStatusEntry(
+                    kind=GitEntryKind.UNTRACKED,
+                    index_status="?",
+                    worktree_status="?",
+                    path="new.py",
+                ),
+            )
+        ),
+        make_status(
+            (
+                GitStatusEntry(
+                    kind=GitEntryKind.ORDINARY,
+                    index_status=".",
+                    worktree_status="D",
+                    path="src/app.py",
+                    submodule="N...",
+                ),
+            )
+        ),
+        make_status(
+            (
+                GitStatusEntry(
+                    kind=GitEntryKind.ORDINARY,
+                    index_status=".",
+                    worktree_status="M",
+                    path="README.md",
+                    submodule="N...",
+                ),
+            )
+        ),
+        make_status((ordinary(submodule="S.M."),)),
+    ),
+)
+async def test_attempt_rejects_nonordinary_or_out_of_scope_state(
+    tmp_path: Path,
+    invalid_status: GitStatusSnapshot,
+) -> None:
+    boundary = workspace(tmp_path)
+    patch = diff("changed")
+    git = attempt_git(
+        tmp_path,
+        attempt_statuses=(invalid_status,),
+        attempt_diffs=(patch,),
+    )
+    tests = RecordingTests(tmp_path, (failed_tests(),))
+
+    result = await RepairRuntime(
+        boundary,
+        git,
+        tests,
+        RecordingWorker(scope_sha256(("src/app.py",))),
+        StaticRepairApprovalHandler(approved=True),
+        journal=RecordingRepairJournal(),
+    ).run(request())
+
+    assert result.stop_reason is RepairStopReason.SCOPE_VIOLATION
+    assert tests.calls == [("tests",)]
+
+
+@pytest.mark.asyncio
+async def test_attempt_rejects_staged_or_oversized_patch(tmp_path: Path) -> None:
+    boundary = workspace(tmp_path)
+    status = make_status((ordinary(),))
+    patch = diff("x" * 11)
+    git = RecordingGit(
+        tmp_path,
+        statuses=(clean_status(), clean_status(), status),
+        staged_diffs=(
+            diff(mode=GitDiffMode.STAGED),
+            diff("staged", mode=GitDiffMode.STAGED),
+        ),
+        unstaged_diffs=(diff(), diff(), patch),
+    )
+    tests = RecordingTests(tmp_path, (failed_tests(),))
+    result = await RepairRuntime(
+        boundary,
+        git,
+        tests,
+        RecordingWorker(scope_sha256(("src/app.py",))),
+        StaticRepairApprovalHandler(approved=True),
+        journal=RecordingRepairJournal(),
+        limits=RepairLimits(max_patch_bytes=10),
+    ).run(request())
+
+    assert result.stop_reason is RepairStopReason.SCOPE_VIOLATION
+
+    git = attempt_git(
+        tmp_path,
+        attempt_statuses=(status,),
+        attempt_diffs=(patch,),
+    )
+    result = await RepairRuntime(
+        boundary,
+        git,
+        RecordingTests(tmp_path, (failed_tests(),)),
+        RecordingWorker(scope_sha256(("src/app.py",))),
+        StaticRepairApprovalHandler(approved=True),
+        journal=RecordingRepairJournal(),
+        limits=RepairLimits(max_patch_bytes=10),
+    ).run(request())
+
+    assert result.stop_reason is RepairStopReason.PATCH_LIMIT
+
+
+@pytest.mark.asyncio
+async def test_attempt_test_mutation_is_detected_before_recording_attempt(
+    tmp_path: Path,
+) -> None:
+    boundary = workspace(tmp_path)
+    status = make_status((ordinary(),))
+    changed = make_status((ordinary(), ordinary()))
+    patch = diff("repair")
+    git = RecordingGit(
+        tmp_path,
+        statuses=(clean_status(), clean_status(), status, changed),
+        staged_diffs=(
+            diff(mode=GitDiffMode.STAGED),
+            diff(mode=GitDiffMode.STAGED),
+        ),
+        unstaged_diffs=(diff(), diff(), patch, diff("mutated")),
+    )
+    tests = RecordingTests(tmp_path, (failed_tests(), passed_tests()))
+
+    result = await RepairRuntime(
+        boundary,
+        git,
+        tests,
+        RecordingWorker(scope_sha256(("src/app.py",))),
+        StaticRepairApprovalHandler(approved=True),
+        journal=RecordingRepairJournal(),
+    ).run(request())
+
+    assert result.stop_reason is RepairStopReason.TEST_MUTATED_REPOSITORY
+    assert result.attempts == ()
+
+
+@pytest.mark.asyncio
+async def test_attempt_infrastructure_failure_is_recorded_then_stops(
+    tmp_path: Path,
+) -> None:
+    boundary = workspace(tmp_path)
+    status = make_status((ordinary(),))
+    patch = diff("repair")
+    infrastructure = pytest_result(
+        status=PytestExecutionStatus.INTERNAL_ERROR,
+        report_status=PytestReportStatus.COMPLETE,
+        exit_code=3,
+    )
+    git = attempt_git(
+        tmp_path,
+        attempt_statuses=(status,),
+        attempt_diffs=(patch,),
+    )
+
+    result = await RepairRuntime(
+        boundary,
+        git,
+        RecordingTests(tmp_path, (failed_tests(), infrastructure)),
+        RecordingWorker(scope_sha256(("src/app.py",))),
+        StaticRepairApprovalHandler(approved=True),
+        journal=RecordingRepairJournal(),
+    ).run(request())
+
+    assert result.stop_reason is RepairStopReason.TEST_INFRASTRUCTURE_ERROR
+    assert len(result.attempts) == 1
+    assert result.attempts[0].test.status is PytestExecutionStatus.INTERNAL_ERROR
+
+
+@pytest.mark.asyncio
+async def test_same_failure_fingerprint_stops_after_first_attempt(
+    tmp_path: Path,
+) -> None:
+    boundary = workspace(tmp_path)
+    status = make_status((ordinary(),))
+    patch = diff("repair")
+    git = attempt_git(
+        tmp_path,
+        attempt_statuses=(status,),
+        attempt_diffs=(patch,),
+    )
+
+    result = await RepairRuntime(
+        boundary,
+        git,
+        RecordingTests(tmp_path, (failed_tests(), failed_tests())),
+        RecordingWorker(scope_sha256(("src/app.py",))),
+        StaticRepairApprovalHandler(approved=True),
+        journal=RecordingRepairJournal(),
+    ).run(request())
+
+    assert result.stop_reason is RepairStopReason.REPEATED_FAILURE
+    assert len(result.attempts) == 1
+
+
+@pytest.mark.asyncio
+async def test_distinct_failures_stop_at_attempt_limit(tmp_path: Path) -> None:
+    boundary = workspace(tmp_path)
+    status = make_status((ordinary(),))
+    patch_one = diff("repair one")
+    patch_two = diff("repair two")
+    git = attempt_git(
+        tmp_path,
+        attempt_statuses=(status, status),
+        attempt_diffs=(patch_one, patch_two),
+    )
+    tests = RecordingTests(
+        tmp_path,
+        (
+            changed_failure("baseline"),
+            changed_failure("failure two"),
+            changed_failure("failure three"),
+        ),
+    )
+    worker = RecordingWorker(scope_sha256(("src/app.py",)))
+
+    result = await RepairRuntime(
+        boundary,
+        git,
+        tests,
+        worker,
+        StaticRepairApprovalHandler(approved=True),
+        journal=RecordingRepairJournal(),
+        limits=RepairLimits(max_attempts=2),
+    ).run(request())
+
+    assert result.stop_reason is RepairStopReason.MAX_ATTEMPTS
+    assert len(result.attempts) == 2
+    assert len(worker.calls) == 2
+
+
+@pytest.mark.asyncio
+async def test_repeated_full_diff_stops_second_attempt_without_test(
+    tmp_path: Path,
+) -> None:
+    boundary = workspace(tmp_path)
+    status = make_status((ordinary(),))
+    patch = diff("same repair")
+    git = RecordingGit(
+        tmp_path,
+        statuses=(clean_status(), clean_status(), status, status, status),
+        staged_diffs=(
+            diff(mode=GitDiffMode.STAGED),
+            diff(mode=GitDiffMode.STAGED),
+            diff(mode=GitDiffMode.STAGED),
+        ),
+        unstaged_diffs=(diff(), diff(), patch, patch, patch),
+    )
+    tests = RecordingTests(
+        tmp_path,
+        (changed_failure("baseline"), changed_failure("different")),
+    )
+    worker = RecordingWorker(scope_sha256(("src/app.py",)))
+
+    result = await RepairRuntime(
+        boundary,
+        git,
+        tests,
+        worker,
+        StaticRepairApprovalHandler(approved=True),
+        journal=RecordingRepairJournal(),
+        limits=RepairLimits(max_attempts=3),
+    ).run(request())
+
+    assert result.stop_reason is RepairStopReason.NO_PROGRESS
+    assert len(result.attempts) == 1
+    assert len(tests.calls) == 2
+
+
+@pytest.mark.asyncio
+async def test_elapsed_budget_stops_before_worker_or_verification(
+    tmp_path: Path,
+) -> None:
+    boundary = workspace(tmp_path)
+    git, tests = admitted_dependencies(tmp_path, (failed_tests(),))
+    worker = RecordingWorker(scope_sha256(("src/app.py",)))
+    before_worker = await RepairRuntime(
+        boundary,
+        git,
+        tests,
+        worker,
+        StaticRepairApprovalHandler(approved=True),
+        journal=RecordingRepairJournal(),
+        limits=RepairLimits(max_elapsed_seconds=1),
+        clock=SequenceClock((0, 0, 2)),
+    ).run(request())
+
+    assert before_worker.stop_reason is RepairStopReason.TIME_LIMIT
+    assert worker.calls == []
+
+    status = make_status((ordinary(),))
+    patch = diff("repair")
+    git = RecordingGit(
+        tmp_path,
+        statuses=(clean_status(), clean_status(), status),
+        staged_diffs=(
+            diff(mode=GitDiffMode.STAGED),
+            diff(mode=GitDiffMode.STAGED),
+        ),
+        unstaged_diffs=(diff(), diff(), patch),
+    )
+    tests = RecordingTests(tmp_path, (failed_tests(),))
+    worker = RecordingWorker(scope_sha256(("src/app.py",)))
+    before_test = await RepairRuntime(
+        boundary,
+        git,
+        tests,
+        worker,
+        StaticRepairApprovalHandler(approved=True),
+        journal=RecordingRepairJournal(),
+        limits=RepairLimits(max_elapsed_seconds=1),
+        clock=SequenceClock((0, 0, 0, 2)),
+    ).run(request())
+
+    assert before_test.stop_reason is RepairStopReason.TIME_LIMIT
+    assert len(worker.calls) == 1
+    assert len(tests.calls) == 1
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("fail_at", (2, 3, 4, 5))
+async def test_journal_failure_stops_all_later_repair_work(
+    tmp_path: Path,
+    fail_at: int,
+) -> None:
+    boundary = workspace(tmp_path)
+    status = make_status((ordinary(),))
+    patch = diff("repair")
+    git = attempt_git(
+        tmp_path,
+        attempt_statuses=(status,),
+        attempt_diffs=(patch,),
+    )
+    tests = RecordingTests(tmp_path, (failed_tests(), passed_tests()))
+    worker = RecordingWorker(scope_sha256(("src/app.py",)))
+
+    result = await RepairRuntime(
+        boundary,
+        git,
+        tests,
+        worker,
+        StaticRepairApprovalHandler(approved=True),
+        journal=FailingAtJournal(fail_at),
+    ).run(request())
+
+    assert result.stop_reason is RepairStopReason.PERSISTENCE_ERROR
+    assert "secret" not in (result.error or "")
+    if fail_at == 2:
+        assert worker.calls == []
+        assert len(tests.calls) == 1
+    if fail_at == 3:
+        assert len(tests.calls) == 1
+    if fail_at >= 4:
+        assert len(tests.calls) == 2
+
+
+class CancellingWorker(RecordingWorker):
+    async def run(self, request: RepairWorkerRequest) -> AgentResult:
+        self.calls.append(request)
+        raise asyncio.CancelledError
+
+
+class DirectoryMutatingWorker(RecordingWorker):
+    def __init__(self, root: Path, scope_sha256: str) -> None:
+        super().__init__(scope_sha256)
+        self._root = root
+
+    async def run(self, request: RepairWorkerRequest) -> AgentResult:
+        target = self._root / "src" / "app.py"
+        target.unlink()
+        target.mkdir()
+        return await super().run(request)
+
+
+@pytest.mark.asyncio
+async def test_worker_cancellation_propagates(tmp_path: Path) -> None:
+    boundary = workspace(tmp_path)
+    git, tests = admitted_dependencies(tmp_path, (failed_tests(),))
+    worker = CancellingWorker(scope_sha256(("src/app.py",)))
+    runtime = RepairRuntime(
+        boundary,
+        git,
+        tests,
+        worker,
+        StaticRepairApprovalHandler(approved=True),
+        journal=RecordingRepairJournal(),
+    )
+
+    with pytest.raises(asyncio.CancelledError):
+        await runtime.run(request())
+
+
+@pytest.mark.asyncio
+async def test_attempt_revalidates_workspace_file_type_before_test(
+    tmp_path: Path,
+) -> None:
+    boundary = workspace(tmp_path)
+    status = make_status((ordinary(),))
+    patch = diff("repair")
+    git = RecordingGit(
+        tmp_path,
+        statuses=(clean_status(), clean_status(), status),
+        staged_diffs=(
+            diff(mode=GitDiffMode.STAGED),
+            diff(mode=GitDiffMode.STAGED),
+        ),
+        unstaged_diffs=(diff(), diff(), patch),
+    )
+    tests = RecordingTests(tmp_path, (failed_tests(),))
+    worker = DirectoryMutatingWorker(
+        tmp_path,
+        scope_sha256(("src/app.py",)),
+    )
+
+    result = await RepairRuntime(
+        boundary,
+        git,
+        tests,
+        worker,
+        StaticRepairApprovalHandler(approved=True),
+        journal=RecordingRepairJournal(),
+    ).run(request())
+
+    assert result.stop_reason is RepairStopReason.SCOPE_VIOLATION
+    assert len(tests.calls) == 1
+
+
+@pytest.mark.asyncio
+async def test_attempt_revalidates_workspace_file_type_after_test(
+    tmp_path: Path,
+) -> None:
+    boundary = workspace(tmp_path)
+    status = make_status((ordinary(),))
+    patch = diff("repair")
+    git = attempt_git(
+        tmp_path,
+        attempt_statuses=(status,),
+        attempt_diffs=(patch,),
+    )
+    tests = FileTypeMutatingTests(
+        tmp_path,
+        (failed_tests(), passed_tests()),
+        mutate_on_call=2,
+    )
+
+    result = await RepairRuntime(
+        boundary,
+        git,
+        tests,
+        RecordingWorker(scope_sha256(("src/app.py",))),
+        StaticRepairApprovalHandler(approved=True),
+        journal=RecordingRepairJournal(),
+    ).run(request())
+
+    assert result.stop_reason is RepairStopReason.TEST_MUTATED_REPOSITORY
+    assert result.attempts == ()
+
+
+@pytest.mark.asyncio
+async def test_elapsed_budget_includes_baseline_test(tmp_path: Path) -> None:
+    boundary = workspace(tmp_path)
+    git, tests = admitted_dependencies(tmp_path, (passed_tests(),))
+
+    result = await RepairRuntime(
+        boundary,
+        git,
+        tests,
+        RecordingWorker(scope_sha256(("src/app.py",))),
+        StaticRepairApprovalHandler(approved=True),
+        journal=RecordingRepairJournal(),
+        limits=RepairLimits(max_elapsed_seconds=1),
+        clock=SequenceClock((0, 2)),
+    ).run(request())
+
+    assert result.stop_reason is RepairStopReason.TIME_LIMIT

@@ -39,6 +39,7 @@ def test_repair_limits_defaults_and_hard_caps() -> None:
         {"max_attempts": 11},
         {"max_elapsed_seconds": 3_601},
         {"max_patch_bytes": 8 * 1024 * 1024 + 1},
+        {"max_same_failure": 1},
         {"max_same_failure": 6},
         {"max_prompt_chars": 256 * 1024 + 1},
     )

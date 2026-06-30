@@ -48,7 +48,7 @@ class RepairLimits(BaseModel):
     max_attempts: int = Field(default=3, ge=1, le=10)
     max_elapsed_seconds: float = Field(default=900, gt=0, le=3600)
     max_patch_bytes: int = Field(default=256 * 1024, ge=1, le=8 * 1024 * 1024)
-    max_same_failure: int = Field(default=2, ge=1, le=5)
+    max_same_failure: int = Field(default=2, ge=2, le=5)
     max_prompt_chars: int = Field(default=64 * 1024, ge=1024, le=256 * 1024)
 
 
