@@ -8,6 +8,8 @@ from pydantic import BaseModel, ConfigDict, Field, computed_field, model_validat
 
 from mini_code_agent.agent.events import AgentEvent
 from mini_code_agent.agent.models import StopReason
+from mini_code_agent.repair.events import RepairEvent
+from mini_code_agent.repair.models import RepairStopReason
 
 IDENTIFIER_PATTERN = r"^[A-Za-z0-9][A-Za-z0-9._-]{0,95}$"
 SHA256_PATTERN = r"^[0-9a-f]{64}$"
@@ -123,3 +125,60 @@ class TraceVerification(BaseModel):
         if self.event_count == 0 and self.trace_head_sha256 != EMPTY_TRACE_SHA256:
             raise ValueError("empty trace verification head is inconsistent")
         return self
+
+
+class RepairRunStatus(StrEnum):
+    ACTIVE = "active"
+    STOPPED = "stopped"
+
+
+class RepairRunRecord(BaseModel):
+    model_config = ConfigDict(extra="forbid", frozen=True)
+
+    repair_id: str = Field(pattern=IDENTIFIER_PATTERN)
+    started_at: datetime
+    stopped_at: datetime | None = None
+    status: RepairRunStatus
+    stop_reason: RepairStopReason | None = None
+    scope_sha256: str = Field(pattern=SHA256_PATTERN)
+    event_count: int = Field(ge=0, le=1_000_000)
+    next_sequence: int = Field(ge=1, le=1_000_001)
+    trace_head_sha256: str = Field(pattern=SHA256_PATTERN)
+
+    @model_validator(mode="after")
+    def validate_projection(self) -> Self:
+        if self.next_sequence != self.event_count + 1:
+            raise ValueError("repair counters are inconsistent")
+        if self.event_count == 0 and self.trace_head_sha256 != EMPTY_TRACE_SHA256:
+            raise ValueError("empty repair trace head is inconsistent")
+        if self.status is RepairRunStatus.ACTIVE:
+            if self.stopped_at is not None or self.stop_reason is not None:
+                raise ValueError("active repair cannot contain terminal metadata")
+            return self
+        if self.stopped_at is None or self.stop_reason is None or self.stopped_at < self.started_at:
+            raise ValueError("stopped repair metadata is inconsistent")
+        return self
+
+
+class RepairTraceRecord(BaseModel):
+    model_config = ConfigDict(extra="forbid", frozen=True)
+
+    schema_version: Literal[1] = TRACE_SCHEMA_VERSION
+    sequence: int = Field(ge=1, le=1_000_000)
+    repair_id: str = Field(pattern=IDENTIFIER_PATTERN)
+    event: RepairEvent
+    previous_sha256: str = Field(pattern=SHA256_PATTERN)
+    event_sha256: str = Field(pattern=SHA256_PATTERN)
+
+    @computed_field
+    @property
+    def event_id(self) -> str:
+        return self.event.event_id
+
+
+class RepairTraceVerification(BaseModel):
+    model_config = ConfigDict(extra="forbid", frozen=True)
+
+    repair_id: str = Field(pattern=IDENTIFIER_PATTERN)
+    event_count: int = Field(ge=0, le=1_000_000)
+    trace_head_sha256: str = Field(pattern=SHA256_PATTERN)

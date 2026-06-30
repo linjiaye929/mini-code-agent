@@ -3,6 +3,7 @@ from __future__ import annotations
 import re
 import sqlite3
 from contextlib import closing
+from datetime import UTC, datetime
 from pathlib import Path
 
 import pytest
@@ -14,6 +15,7 @@ from mini_code_agent.persistence.models import (
     SessionTraceLimits,
 )
 from mini_code_agent.persistence.store import SqliteSessionTraceStore
+from mini_code_agent.repair.events import RepairStarted
 
 
 def test_store_requires_explicit_initialization(tmp_path: Path) -> None:
@@ -156,3 +158,39 @@ def test_malformed_database_row_is_normalized_without_raw_content(
 
     assert captured.value.code is PersistenceErrorCode.TRACE_CORRUPT
     assert "secret-invalid-timestamp" not in captured.value.public_message
+
+
+def test_store_exposes_repair_journal_queries_and_verification(
+    tmp_path: Path,
+) -> None:
+    database = tmp_path / "state.db"
+    with SqliteSessionTraceStore(database) as store:
+        event = RepairStarted(
+            repair_id="repair-1",
+            timestamp=datetime.now(UTC),
+            scope_sha256="a" * 64,
+            max_attempts=3,
+            test_target_count=1,
+            editable_path_count=1,
+        )
+        store.repair_journal().append(event)
+
+        run = store.get_repair_run("repair-1")
+        records = store.read_repair_trace("repair-1")
+        verification = store.verify_repair_trace("repair-1")
+
+    assert run.repair_id == "repair-1"
+    assert tuple(record.event for record in records) == (event,)
+    assert verification.event_count == 1
+
+
+def test_repair_store_accessors_require_initialization(tmp_path: Path) -> None:
+    store = SqliteSessionTraceStore(tmp_path / "state.db")
+
+    with pytest.raises(PersistenceError) as journal_error:
+        store.repair_journal()
+    with pytest.raises(PersistenceError) as read_error:
+        store.read_repair_trace("repair-1")
+
+    assert journal_error.value.code is PersistenceErrorCode.STORAGE_FAILED
+    assert read_error.value.code is PersistenceErrorCode.STORAGE_FAILED

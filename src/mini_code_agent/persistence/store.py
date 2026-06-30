@@ -47,6 +47,9 @@ from mini_code_agent.persistence.models import (
     EMPTY_TRACE_SHA256,
     IDENTIFIER_PATTERN,
     TRACE_SCHEMA_VERSION,
+    RepairRunRecord,
+    RepairTraceRecord,
+    RepairTraceVerification,
     RunRecord,
     RunStatus,
     SessionRecord,
@@ -54,6 +57,18 @@ from mini_code_agent.persistence.models import (
     SessionTraceLimits,
     TraceRecord,
     TraceVerification,
+)
+from mini_code_agent.persistence.repair import (
+    SqliteRepairJournal,
+)
+from mini_code_agent.persistence.repair import (
+    get_repair_run as load_repair_run,
+)
+from mini_code_agent.persistence.repair import (
+    read_repair_trace as load_repair_trace,
+)
+from mini_code_agent.persistence.repair import (
+    verify_repair_trace as verify_stored_repair_trace,
 )
 from mini_code_agent.persistence.schema import connect_database, initialize_database
 from mini_code_agent.persistence.trace import (
@@ -239,6 +254,42 @@ class SqliteSessionTraceStore:
             self._limits,
             session_id,
             self._secrets,
+        )
+
+    def repair_journal(self) -> SqliteRepairJournal:
+        self._ensure_initialized()
+        return SqliteRepairJournal(
+            self._database,
+            self._limits,
+            self._secrets,
+        )
+
+    def get_repair_run(self, repair_id: str) -> RepairRunRecord:
+        self._ensure_initialized()
+        return load_repair_run(self._database, self._limits, repair_id)
+
+    def read_repair_trace(
+        self,
+        repair_id: str,
+        *,
+        after_sequence: int = 0,
+        limit: int = 100,
+    ) -> tuple[RepairTraceRecord, ...]:
+        self._ensure_initialized()
+        return load_repair_trace(
+            self._database,
+            self._limits,
+            repair_id,
+            after_sequence=after_sequence,
+            limit=limit,
+        )
+
+    def verify_repair_trace(self, repair_id: str) -> RepairTraceVerification:
+        self._ensure_initialized()
+        return verify_stored_repair_trace(
+            self._database,
+            self._limits,
+            repair_id,
         )
 
     def checkpoints(self, session_id: str) -> SessionCheckpointJournal:

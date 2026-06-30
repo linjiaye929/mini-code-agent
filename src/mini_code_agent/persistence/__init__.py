@@ -6,6 +6,10 @@ from mini_code_agent.persistence.errors import (
 from mini_code_agent.persistence.journal import SessionEventJournal
 from mini_code_agent.persistence.models import (
     EMPTY_TRACE_SHA256,
+    RepairRunRecord,
+    RepairRunStatus,
+    RepairTraceRecord,
+    RepairTraceVerification,
     RunRecord,
     RunStatus,
     SessionRecord,
@@ -14,6 +18,7 @@ from mini_code_agent.persistence.models import (
     TraceRecord,
     TraceVerification,
 )
+from mini_code_agent.persistence.repair import SqliteRepairJournal
 from mini_code_agent.persistence.schema import (
     connect_database,
     initialize_database,
@@ -24,6 +29,10 @@ __all__ = [
     "EMPTY_TRACE_SHA256",
     "PersistenceError",
     "PersistenceErrorCode",
+    "RepairRunRecord",
+    "RepairRunStatus",
+    "RepairTraceRecord",
+    "RepairTraceVerification",
     "RunRecord",
     "RunStatus",
     "SessionCheckpointJournal",
@@ -31,6 +40,7 @@ __all__ = [
     "SessionRecord",
     "SessionStatus",
     "SessionTraceLimits",
+    "SqliteRepairJournal",
     "SqliteSessionTraceStore",
     "TraceRecord",
     "TraceVerification",

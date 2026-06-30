@@ -11,10 +11,11 @@ from mini_code_agent.persistence.errors import (
 )
 from mini_code_agent.persistence.models import SessionTraceLimits
 
-DATABASE_SCHEMA_VERSION = 2
+DATABASE_SCHEMA_VERSION = 3
 
 _V1_REQUIRED_TABLES = frozenset({"sessions", "runs", "trace_events"})
-_REQUIRED_TABLES = _V1_REQUIRED_TABLES | {"checkpoints"}
+_V2_REQUIRED_TABLES = _V1_REQUIRED_TABLES | {"checkpoints"}
+_REQUIRED_TABLES = _V2_REQUIRED_TABLES | {"repair_runs", "repair_events"}
 
 _V1_SCHEMA_STATEMENTS = (
     """
@@ -109,7 +110,53 @@ _CHECKPOINT_SCHEMA_STATEMENTS = (
     """,
 )
 
-_SCHEMA_STATEMENTS = _V1_SCHEMA_STATEMENTS + _CHECKPOINT_SCHEMA_STATEMENTS
+_REPAIR_SCHEMA_STATEMENTS = (
+    """
+    CREATE TABLE repair_runs (
+        repair_id TEXT PRIMARY KEY,
+        started_at TEXT NOT NULL,
+        stopped_at TEXT,
+        status TEXT NOT NULL CHECK (status IN ('active', 'stopped')),
+        stop_reason TEXT,
+        scope_sha256 TEXT NOT NULL CHECK (length(scope_sha256) = 64),
+        event_count INTEGER NOT NULL CHECK (event_count >= 0),
+        next_sequence INTEGER NOT NULL CHECK (next_sequence >= 1),
+        trace_head_sha256 TEXT NOT NULL CHECK (length(trace_head_sha256) = 64),
+        CHECK (
+            (status = 'active' AND stopped_at IS NULL AND stop_reason IS NULL)
+            OR
+            (status = 'stopped' AND stopped_at IS NOT NULL AND stop_reason IS NOT NULL)
+        )
+    )
+    """,
+    """
+    CREATE TABLE repair_events (
+        repair_id TEXT NOT NULL,
+        sequence INTEGER NOT NULL CHECK (sequence >= 1),
+        schema_version INTEGER NOT NULL CHECK (schema_version = 1),
+        event_id TEXT NOT NULL UNIQUE,
+        event_type TEXT NOT NULL,
+        event_timestamp TEXT NOT NULL,
+        payload_json TEXT NOT NULL,
+        previous_sha256 TEXT NOT NULL CHECK (length(previous_sha256) = 64),
+        event_sha256 TEXT NOT NULL CHECK (length(event_sha256) = 64),
+        PRIMARY KEY (repair_id, sequence),
+        FOREIGN KEY (repair_id) REFERENCES repair_runs(repair_id)
+    )
+    """,
+    """
+    CREATE INDEX repair_runs_started_idx
+    ON repair_runs(started_at DESC, repair_id ASC)
+    """,
+    """
+    CREATE INDEX repair_events_repair_type_idx
+    ON repair_events(repair_id, event_type, sequence)
+    """,
+)
+
+_SCHEMA_STATEMENTS = (
+    _V1_SCHEMA_STATEMENTS + _CHECKPOINT_SCHEMA_STATEMENTS + _REPAIR_SCHEMA_STATEMENTS
+)
 
 
 @contextmanager
@@ -162,16 +209,21 @@ def initialize_database(
         try:
             connection.execute("PRAGMA journal_mode = WAL")
             version = int(connection.execute("PRAGMA user_version").fetchone()[0])
-            if version not in (0, 1, DATABASE_SCHEMA_VERSION):
+            if version not in (0, 1, 2, DATABASE_SCHEMA_VERSION):
                 raise PersistenceError(
                     PersistenceErrorCode.UNSUPPORTED_SCHEMA,
                     "Session database schema is unsupported.",
                 )
             if version == 0:
                 _create_schema(connection)
-            elif version == 1:
-                _verify_required_tables(connection, _V1_REQUIRED_TABLES)
-                _migrate_v1_to_v2(connection)
+            else:
+                if version == 1:
+                    _verify_required_tables(connection, _V1_REQUIRED_TABLES)
+                    _migrate_v1_to_v2(connection)
+                    version = 2
+                if version == 2:
+                    _verify_required_tables(connection, _V2_REQUIRED_TABLES)
+                    _migrate_v2_to_v3(connection)
             _verify_schema(connection)
         except PersistenceError:
             raise
@@ -198,6 +250,18 @@ def _migrate_v1_to_v2(connection: sqlite3.Connection) -> None:
     connection.execute("BEGIN IMMEDIATE")
     try:
         for statement in _CHECKPOINT_SCHEMA_STATEMENTS:
+            connection.execute(statement)
+        connection.execute(f"PRAGMA user_version = {DATABASE_SCHEMA_VERSION}")
+        connection.commit()
+    except Exception:
+        connection.rollback()
+        raise
+
+
+def _migrate_v2_to_v3(connection: sqlite3.Connection) -> None:
+    connection.execute("BEGIN IMMEDIATE")
+    try:
+        for statement in _REPAIR_SCHEMA_STATEMENTS:
             connection.execute(statement)
         connection.execute(f"PRAGMA user_version = {DATABASE_SCHEMA_VERSION}")
         connection.commit()
