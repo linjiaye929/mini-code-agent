@@ -28,6 +28,9 @@ All notable changes follow Keep a Changelog. Versions follow Semantic Versioning
 - Persistence schema advances from v2 to v3 through sequential transactional migration.
 - Sequential v1-to-v2-to-v3 failure preserves the last completed schema version so migration can
   be retried after the v3 fault is removed.
+- Session and Repair trace verification read projections and event chains from one SQLite
+  transaction snapshot; Resume write contention invalidates the analyzed plan instead of
+  surfacing a false corruption/storage failure.
 - M4c completes a library-level bounded Repair workflow; CLI composition remains a later surface.
 
 ### Security

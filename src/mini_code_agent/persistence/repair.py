@@ -135,7 +135,7 @@ def verify_repair_trace(
     limits: SessionTraceLimits,
     repair_id: str,
 ) -> RepairTraceVerification:
-    run = get_repair_run(database, limits, repair_id)
+    _validate_identifier(repair_id)
     previous = EMPTY_TRACE_SHA256
     expected_sequence = 1
     previous_timestamp: datetime | None = None
@@ -143,6 +143,17 @@ def verify_repair_trace(
     first_event: RepairStarted | None = None
     completed_count = 0
     with connect_database(database, limits) as connection:
+        connection.execute("BEGIN")
+        run_row = connection.execute(
+            "SELECT * FROM repair_runs WHERE repair_id = ?",
+            (repair_id,),
+        ).fetchone()
+        if run_row is None:
+            raise PersistenceError(
+                PersistenceErrorCode.RUN_NOT_FOUND,
+                "Repair Run was not found.",
+            )
+        run = _run_from_row(run_row)
         cursor = connection.execute(
             """
             SELECT * FROM repair_events

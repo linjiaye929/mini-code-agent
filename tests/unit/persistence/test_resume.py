@@ -19,6 +19,7 @@ from mini_code_agent.agent.models import StopReason
 from mini_code_agent.checkpoint.models import (
     CheckpointDraft,
     ResumeCompatibility,
+    ResumePlan,
     ResumePolicy,
 )
 from mini_code_agent.domain.content import ToolCall, ToolResult
@@ -81,6 +82,22 @@ def compatibility(
         tool_contract_sha256=tool,
         workspace_sha256=workspace,
     )
+
+
+def attempt_resume_claim(
+    store: SqliteSessionTraceStore,
+    plan: ResumePlan,
+    run_id: str,
+) -> str:
+    try:
+        return store.claim_resume(
+            plan,
+            resumed_run_id=run_id,
+            max_turns=8,
+            compatibility=compatibility(),
+        ).resumed_run_id
+    except PersistenceError as exc:
+        return exc.code.value
 
 
 def test_resume_analysis_accepts_compatible_checkpoint_without_mutation(
@@ -411,7 +428,31 @@ def test_resume_claim_rolls_back_both_events_when_consumption_fails(
 
 
 def test_concurrent_resume_claim_has_exactly_one_winner(tmp_path: Path) -> None:
-    store = active_store(tmp_path / "state.db")
+    for iteration in range(10):
+        store = active_store(tmp_path / f"state-{iteration}.db")
+        saved = store.checkpoints("session-1").save(draft())
+        plan = store.analyze_resume(
+            "session-1",
+            saved.checkpoint_id,
+            compatibility=compatibility(),
+        )
+
+        with ThreadPoolExecutor(max_workers=2) as pool:
+            futures = (
+                pool.submit(attempt_resume_claim, store, plan, "run-2"),
+                pool.submit(attempt_resume_claim, store, plan, "run-3"),
+            )
+            results = tuple(future.result() for future in futures)
+
+        winners = [result for result in results if result in {"run-2", "run-3"}]
+        losers = [result for result in results if result == "checkpoint_stale"]
+        assert len(winners) == 1, (iteration, results)
+        assert len(losers) == 1, (iteration, results)
+
+
+def test_resume_claim_write_contention_invalidates_plan(tmp_path: Path) -> None:
+    database = tmp_path / "state.db"
+    store = active_store(database)
     saved = store.checkpoints("session-1").save(draft())
     plan = store.analyze_resume(
         "session-1",
@@ -419,21 +460,15 @@ def test_concurrent_resume_claim_has_exactly_one_winner(tmp_path: Path) -> None:
         compatibility=compatibility(),
     )
 
-    def attempt(run_id: str) -> str:
-        try:
-            return store.claim_resume(
+    with closing(sqlite3.connect(database, isolation_level=None)) as blocker:
+        blocker.execute("BEGIN IMMEDIATE")
+        with pytest.raises(PersistenceError) as captured:
+            store.claim_resume(
                 plan,
-                resumed_run_id=run_id,
+                resumed_run_id="run-2",
                 max_turns=8,
                 compatibility=compatibility(),
-            ).resumed_run_id
-        except PersistenceError as exc:
-            return exc.code.value
+            )
+        blocker.rollback()
 
-    with ThreadPoolExecutor(max_workers=2) as pool:
-        results = tuple(pool.map(attempt, ("run-2", "run-3")))
-
-    winners = [result for result in results if result in {"run-2", "run-3"}]
-    losers = [result for result in results if result == "checkpoint_stale"]
-    assert len(winners) == 1
-    assert len(losers) == 1
+    assert captured.value.code is PersistenceErrorCode.CHECKPOINT_STALE

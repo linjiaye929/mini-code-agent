@@ -568,6 +568,17 @@ class SqliteSessionTraceStore:
             except PersistenceError:
                 connection.rollback()
                 raise
+            except sqlite3.OperationalError as exc:
+                connection.rollback()
+                if _is_sqlite_lock_conflict(exc):
+                    raise PersistenceError(
+                        PersistenceErrorCode.CHECKPOINT_STALE,
+                        "Resume plan is stale.",
+                    ) from None
+                raise PersistenceError(
+                    PersistenceErrorCode.STORAGE_FAILED,
+                    "Resume could not be claimed.",
+                ) from None
             except (sqlite3.Error, TypeError, ValueError, ValidationError):
                 connection.rollback()
                 raise PersistenceError(
@@ -602,11 +613,10 @@ class SqliteSessionTraceStore:
     def verify_trace(self, session_id: str) -> TraceVerification:
         self._ensure_initialized()
         self._validate_identifier(session_id)
-        session = self.get_session(session_id)
         return verify_session_trace(
             self._database,
             self._limits,
-            session,
+            session_id,
         )
 
     def _ensure_initialized(self) -> None:
@@ -678,3 +688,11 @@ def _resume_trace_corrupt() -> PersistenceError:
         PersistenceErrorCode.TRACE_CORRUPT,
         "Resume trace state is invalid.",
     )
+
+
+def _is_sqlite_lock_conflict(error: sqlite3.OperationalError) -> bool:
+    code = getattr(error, "sqlite_errorcode", None)
+    return isinstance(code, int) and (code & 0xFF) in {
+        sqlite3.SQLITE_BUSY,
+        sqlite3.SQLITE_LOCKED,
+    }

@@ -574,14 +574,12 @@
   accessors 均有单元测试。
 - 真实集成测试覆盖一次 Agent read/edit 修复成功、scope 外写入 pre-policy 拒绝、dirty
   repository 在 Provider/Pytest 前拒绝，以及 baseline test mutation 在 Provider 前停止。
-- Python 3.12.13 与 3.13.14 完整开发套件各为 797 passed、6 skipped；skip 均为 Windows
-  symlink 权限条件。Python 3.13 分支覆盖率为 90.90%，超过 85% 门槛。
+- Python 3.12.13 与 3.13.14 完整开发套件各为 798 passed、6 skipped；skip 均为 Windows
+  symlink 权限条件。Python 3.13 分支覆盖率为 90.88%，超过 85% 门槛。
 - Ruff format/check、strict Pyright、Bandit 与锁定运行时依赖 pip-audit 均通过。
-- 哈希约束构建生成 `mini_code_agent-0.12.0a0-py3-none-any.whl`
-  (`924c26ad3eca49a6dd2187a0d0962ecdfe6e61e2c7bf070234d25cec93d0c6ba`) 和
-  `mini_code_agent-0.12.0a0.tar.gz`
-  (`541107ecd861b8cb48055fc17fc5031b2ea956757a1c2f6fae92432b5b6ed440`)。
-- wheel 与 sdist 在 Python 3.12/3.13 的四组隔离安装 smoke 均通过，包含公开
-  `RepairRuntime`、`AgentRepairWorker` 与 `RepairActionGuard` 导入及 CLI 版本验证。
+- 并发 claim 回归在同一测试内执行 10 个独立数据库轮次，并额外连续执行 20 次，共 200
+  轮均保持一个 winner 和一个 `checkpoint_stale` loser。
 - 代码审查新增迁移失败保持 v2 可重试、成功终态必须有可信测试证据、editable path 单项
-  1 KiB 上限回归。远程 CI 和 `v0.12.0-alpha.0` GitHub prerelease 证据待发布后回填。
+  1 KiB 上限回归。主分支初始 CI `28465232075` 暴露 Session projection/event 双快照竞态；
+  Session 与 Repair 验证已改为单 SQLite 只读事务，write contention 统一使 Resume plan
+  stale。最终 artifact smoke、远程 CI 和 GitHub prerelease 证据待发布后回填。

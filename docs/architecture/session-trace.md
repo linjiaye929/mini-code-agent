@@ -103,7 +103,9 @@ current_hash = SHA256(canonical_json(
 
 `verify_trace` reads bounded pages, parses every payload through the typed `AgentEvent` union,
 checks row metadata, contiguous sequence, previous hash, recomputed current hash, event count,
-next sequence, and Session head.
+next sequence, and Session head. Projection and event pages share one SQLite read transaction so
+a concurrent committed append cannot combine two individually valid snapshots into a false
+corruption result.
 
 The chain detects accidental or unsophisticated modification. It is not authenticated, signed,
 tamper-proof, or protected from an attacker who can rewrite the database and all hashes.

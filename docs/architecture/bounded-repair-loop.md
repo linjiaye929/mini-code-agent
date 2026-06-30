@@ -150,7 +150,8 @@ SQLite schema v3 adds independent `repair_runs` and `repair_events` tables. Repa
 
 Events contain IDs, statuses, counts, budgets, and hashes. They exclude prompts, patches,
 diagnostics, stdout, stderr, and ToolResults. Agent Checkpoints remain separate bounded plaintext
-and can contain full repair context.
+and can contain full repair context. Repair projection and event-chain verification use one SQLite
+read transaction snapshot so active concurrent appends do not create mixed-snapshot false alarms.
 
 An active Repair row without `RepairStopped` is indeterminate evidence. M4c does not automatically
 resume it because replay could repeat writes. Inspect the working tree and start a new explicitly

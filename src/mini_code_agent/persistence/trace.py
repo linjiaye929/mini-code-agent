@@ -3,11 +3,14 @@ from __future__ import annotations
 import sqlite3
 from pathlib import Path
 
+from pydantic import ValidationError
+
 from mini_code_agent.persistence.codec import (
     decode_event,
     event_sha256,
     trace_corrupt,
 )
+from mini_code_agent.persistence.errors import PersistenceError, PersistenceErrorCode
 from mini_code_agent.persistence.models import (
     EMPTY_TRACE_SHA256,
     TRACE_SCHEMA_VERSION,
@@ -44,7 +47,7 @@ def read_trace_records(
 def verify_session_trace(
     database: Path,
     limits: SessionTraceLimits,
-    session: SessionRecord,
+    session_id: str,
 ) -> TraceVerification:
     expected_sequence = 1
     expected_previous = EMPTY_TRACE_SHA256
@@ -52,6 +55,20 @@ def verify_session_trace(
     after_sequence = 0
 
     with connect_database(database, limits) as connection:
+        connection.execute("BEGIN")
+        row = connection.execute(
+            "SELECT * FROM sessions WHERE session_id = ?",
+            (session_id,),
+        ).fetchone()
+        if row is None:
+            raise PersistenceError(
+                PersistenceErrorCode.SESSION_NOT_FOUND,
+                "Session was not found.",
+            )
+        try:
+            session = SessionRecord.model_validate(dict(row))
+        except (TypeError, ValueError, ValidationError):
+            raise trace_corrupt() from None
         while True:
             rows = connection.execute(
                 """
