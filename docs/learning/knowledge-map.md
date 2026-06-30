@@ -556,7 +556,8 @@
 
 - 固定 `PytestProfile`：解释器、timeout、`maxfail`、默认 target 和可信插件均由宿主
   配置，模型不能构造命令。
-- `python -I` 隔离用户 site 与 `PYTHON*` 启动影响；
+- `python -I -B` 隔离用户 site 与 `PYTHON*` 启动影响，并避免 Harness 测试运行写入
+  `__pycache__`；
   `PYTEST_DISABLE_PLUGIN_AUTOLOAD=1` 禁止环境中的 entry-point 插件自动扩展执行面。
 - POSIX 的 `.venv/bin/python` 可能是 symlink；不能对 `sys.executable` 调用
   `resolve()`，否则会丢失 venv identity，`-I` 下会落到不含 Pytest 的 base Python。
@@ -601,6 +602,71 @@
    比较显式依赖与 ambient plugin 的差异。
 5. 让测试打印一个 marker，检查 ToolResult 与 SQLite Trace，说明数据保存边界。
 6. 解释为什么 `-p no:cacheprovider` 不能支持“测试执行不修改工作区”的结论。
+
+#### M4c 宿主控制的有限 Repair
+
+**前置知识**
+
+- 反馈控制循环：输入是结构化失败证据，执行器产生一次受限修改，宿主重新测量并决定
+  继续或停止。
+- Git tracked、ignored、untracked、index、working tree 的差异；“status 干净”不等于
+  指定文件已被 Git 跟踪。
+- Git pathspec magic，尤其是 `:(top,literal)` 如何把路径当数据而不是匹配语法。
+- Python `Protocol`、不可变 Pydantic model、`asyncio` 取消传播和单调时钟预算。
+- canonical JSON、SHA-256、SQLite 事务、materialized projection 与 hash chain。
+
+**本项目用到的知识**
+
+- `RepairRuntime` 是 `AgentRuntime` 外层的宿主状态机。模型只负责一次修复尝试，不能
+  决定测试命令、成功标准、重试次数或终止条件。
+- Admission 先要求显式 Repair approval，再验证三个根目录一致、仓库完全干净、目标是
+  现存普通文件，并用 `git ls-files --error-unmatch -z -- :(top,literal)...` 验证 exact
+  tracked set。
+- `RepairActionGuard` 位于普通 Policy 前：只读动作继续进入 Policy；write resource 必须
+  精确等于 scope；execute/network 直接拒绝。它是额外约束，不替代 Schema、Policy 和审批。
+- baseline 与每轮验证都使用相同宿主固定 target。只有 process=`passed` 且
+  report=`complete` 才算成功，模型文本不能声明“已修复”。
+- Worker 返回后，宿主验证 branch 未变、staged diff 为空、状态只有 scope 内普通 unstaged
+  `M`，patch 非空且有进展，并在测试前后再次核对 Git 指纹和 Workspace file identity。
+- 失败指纹只纳入稳定的 status/count/diagnostic 字段，排除 stdout、stderr、duration 和
+  details；默认第二次出现同一失败就停止，避免无进展循环。
+- attempts、elapsed time、full patch bytes、same-failure appearances 和 Worker prompt
+  characters 是独立预算；任一超限都有 typed stop reason。
+- SQLite schema v3 用独立 `repair_runs`/`repair_events` 保存生命周期 hash chain，不保存
+  prompt、patch 或 diagnostics。started-only Repair 不能自动 Resume，因为可能已经写盘。
+
+**Java/Flink/Spark SQL 映射**
+
+- `RepairRuntime` 类似 Flink JobManager 控制重启策略：Task/模型只执行一次工作，是否重试
+  由控制平面依据确定性状态和预算决定。
+- `RepairActionGuard -> Policy -> Approval -> Tool` 类似服务端多层拦截器；前一层拒绝后，
+  后续鉴权和业务执行都不应发生。
+- baseline/failure fingerprint 类似 Checkpoint state hash：它用于比较观察结果，不是锁，
+  也不能阻止并发写入。
+- exact tracked scope 类似 Spark SQL 写入前固定目标分区集合；仅检查“当前无脏数据”不能
+  证明目标属于受治理数据集。
+- `repair_runs` projection 加 append-only events 类似 CQRS 的物化视图与事件日志；必须在
+  同一事务更新，否则终态和事件链可能分裂。
+
+**阅读顺序**
+
+1. `repair/models.py` 与 `repair/fingerprint.py`：先看预算、不变量和稳定失败身份。
+2. `repair/scope.py` 与 `policy/executor.py`：看 pre-policy exact-scope guard。
+3. `git/client.py`：看 literal tracked-path query 和 exact output-set 校验。
+4. `repair/worker.py`：看一次 Agent run 如何被适配成一次 attempt。
+5. `repair/runtime.py`：按 admission、baseline、attempt、verification、terminal 顺序跟踪。
+6. `persistence/repair.py`：看 Repair event/projection 的事务和完整性验证。
+7. `tests/integration/test_bounded_repair_agent.py`：看真实成功、越权、dirty repo 和测试
+   mutation 四条端到端路径。
+
+**练习**
+
+1. 解释 ignored 文件为什么可能让 `git status` 干净，却不能成为 Repair editable path。
+2. 让 Worker 尝试修改 scope 外文件，确认 denial 发生在 approval handler 和磁盘写入前。
+3. 构造 stdout 每次变化但 diagnostics 相同的失败，说明 canonical fingerprint 为何稳定。
+4. 让测试创建并删除临时文件，说明最终状态核对为何仍不是 OS isolation。
+5. 中断一个 started-only Repair，说明为什么“重新运行同一 prompt”可能重复副作用。
+6. 比较“自动 reset 失败 patch”和“保留工作树供检查”的数据安全取舍。
 
 ### L9：Skills 与 Hooks
 

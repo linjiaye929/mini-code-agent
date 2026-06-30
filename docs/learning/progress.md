@@ -10,7 +10,7 @@
 | L5 File/Edit/Command/Git tools | Complete locally | Read/Search/Write/Edit/argv Command plus hardened Git status/diff |
 | L6 Context Budget | Complete locally | Deterministic estimator, atomic selection, side-effect pinning, runtime integration |
 | L7 Session/Checkpoint/Trace | Complete locally | M3b Trace plus M3c stable Checkpoint/fail-closed Resume |
-| L8 Git/test/repair | In progress | M4a Git + M4b governed Pytest diagnostics complete; Repair pending |
+| L8 Git/test/repair | Complete locally | M4a Git + M4b Pytest + M4c bounded Repair; release gates pending |
 | L9 Skills and Hooks | Not started | |
 | L10 MCP | Not started | |
 | L11 Subagent and Worktree | Not started | |
@@ -480,8 +480,8 @@
   select only existing workspace-relative files/directories and provide an approval reason.
 - The host owns the absolute Python executable, timeout, `maxfail`, default targets, and trusted
   plugins. Profile models are immutable and validated before execution.
-- Fixed argv uses `python -I -m pytest`, disables ambient plugin autoload and Pytest cache writes,
-  and places `--` before validated targets.
+- Fixed argv uses `python -I -B -m pytest`, disables bytecode, ambient plugin, and Pytest cache
+  writes, and places `--` before validated targets.
 - The host preserves the active `sys.executable` path. Resolving a POSIX venv symlink selects the
   base interpreter and loses environment-local Pytest under isolated startup.
 - Execute remains denied by default. Interactive `ASK` requires independent approval;
@@ -537,3 +537,51 @@
   `575ecb8f3a73eadb9598b1eda2e52fdfadcde56e`. The verified GitHub prerelease is
   <https://github.com/linjiayebat/mini-code-agent/releases/tag/v0.11.0-alpha.0>; its uploaded wheel
   and sdist SHA-256 digests match the locally smoke-tested artifacts listed above.
+
+## M4c Bounded Repair Notes
+
+- `RepairRuntime` 是独立于普通 Agent Loop 的宿主控制平面：一个 Worker 调用只对应一次
+  repair attempt，baseline、Pytest target、成功判定、预算和停止原因都由宿主拥有。
+- Admission 要求显式批准、三个 root 完全一致、仓库干净、editable path 是现存普通文件，
+  并用 literal top-level pathspec 逐一证明 exact tracked set。
+- `RepairActionGuard` 在普通 Policy 前拒绝越界 write、execute 和 network；普通
+  Schema/Policy/approval 仍继续保护允许的 read 和 scope write。
+- baseline 和每轮验证均使用固定 `python -I -B -m pytest`。成功必须同时满足 process
+  passed 与 JUnit complete，模型最终文本不参与判定。
+- 每次 Worker 后核对 branch、staged/unstaged status、exact path set、submodule、完整 patch
+  和 Workspace identity；测试前后证据不一致会以 `test_mutated_repository` 停止。
+- canonical failure fingerprint 排除易抖动 stdout/stderr/duration/details；attempt、time、
+  patch、prompt 和 same-failure 各自有硬限制。
+- SQLite schema v3 的 Repair journal 与 Agent Trace 分离，但同样使用 UUID 幂等键、
+  canonical JSON、SHA-256 前驱链和事务式 projection。started-only Repair 不自动恢复。
+- Repair 是 library-level composition，不是 OS sandbox、自动 rollback、自动 commit、
+  Worktree isolation 或 CLI workflow。
+
+## M4c Exercises
+
+1. 从 `RepairRequest` 跟踪 clean admission、baseline、Worker、Git validation、retest 和
+   `RepairStopped`。
+2. 对比 clean status 与 exact tracked query，解释 ignored path 为什么必须单独拒绝。
+3. 让 Worker 请求 scope 外 write，验证 ordinary approval handler 未被调用且文件未改变。
+4. 让测试在验证阶段修改源码，验证 passing JUnit 仍不能产生 `repaired`。
+5. 让两轮 diagnostics 相同但 stdout 不同，验证 repeated-failure 仍能停止。
+6. 打开 SQLite 检查 Repair rows，说明为什么不保存 patch 和 diagnostics，同时为什么 Agent
+   Checkpoint 仍属于敏感明文。
+
+## M4c Local Verification
+
+- Repair contract、scope、fingerprint、worker、event、runtime、SQLite migration/journal 和
+  accessors 均有单元测试。
+- 真实集成测试覆盖一次 Agent read/edit 修复成功、scope 外写入 pre-policy 拒绝、dirty
+  repository 在 Provider/Pytest 前拒绝，以及 baseline test mutation 在 Provider 前停止。
+- Python 3.12.13 与 3.13.14 完整开发套件各为 797 passed、6 skipped；skip 均为 Windows
+  symlink 权限条件。Python 3.13 分支覆盖率为 90.90%，超过 85% 门槛。
+- Ruff format/check、strict Pyright、Bandit 与锁定运行时依赖 pip-audit 均通过。
+- 哈希约束构建生成 `mini_code_agent-0.12.0a0-py3-none-any.whl`
+  (`924c26ad3eca49a6dd2187a0d0962ecdfe6e61e2c7bf070234d25cec93d0c6ba`) 和
+  `mini_code_agent-0.12.0a0.tar.gz`
+  (`541107ecd861b8cb48055fc17fc5031b2ea956757a1c2f6fae92432b5b6ed440`)。
+- wheel 与 sdist 在 Python 3.12/3.13 的四组隔离安装 smoke 均通过，包含公开
+  `RepairRuntime`、`AgentRepairWorker` 与 `RepairActionGuard` 导入及 CLI 版本验证。
+- 代码审查新增迁移失败保持 v2 可重试、成功终态必须有可信测试证据、editable path 单项
+  1 KiB 上限回归。远程 CI 和 `v0.12.0-alpha.0` GitHub prerelease 证据待发布后回填。

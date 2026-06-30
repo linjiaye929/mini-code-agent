@@ -4,6 +4,46 @@ All notable changes follow Keep a Changelog. Versions follow Semantic Versioning
 
 ## [Unreleased]
 
+## [0.12.0-alpha.0] - 2026-07-01
+
+### Added
+
+- Host-controlled `RepairRuntime` with explicit approval, baseline verification, bounded Agent
+  attempts, Git evidence validation, fixed Pytest verification, and typed stop reasons.
+- Exact existing tracked-file admission through literal top-level Git pathspecs and a
+  `RepairActionGuard` that permits reads and exact scoped writes while denying execute/network.
+- Canonical failure fingerprints plus independent attempt, elapsed-time, patch-size,
+  same-failure, and Worker-prompt budgets.
+- `AgentRepairWorker` adapter that gives one governed Agent run one repair attempt without letting
+  the model own verification or termination.
+- SQLite schema v3 `repair_runs`/`repair_events` lifecycle journal with transactional projections,
+  exact idempotency, bounded queries, canonical SHA-256 chains, and trace verification.
+- Real Git/Pytest/Agent/SQLite integration coverage for successful repair, pre-policy scope denial,
+  dirty-repository rejection, and test-induced mutation detection.
+
+### Changed
+
+- Fixed Pytest execution now uses `python -I -B -m pytest`; `-B` prevents harness test runs from
+  creating bytecode cache files in the repository.
+- Persistence schema advances from v2 to v3 through sequential transactional migration.
+- Sequential v1-to-v2-to-v3 failure preserves the last completed schema version so migration can
+  be retried after the v3 fault is removed.
+- M4c completes a library-level bounded Repair workflow; CLI composition remains a later surface.
+
+### Security
+
+- Repair starts only from a clean repository and an exact set of existing Git-tracked files.
+- Every accepted attempt must leave only ordinary unstaged modifications inside the approved
+  scope; staged, untracked, renamed, conflicted, submodule, branch, no-progress, and oversized
+  changes stop the session.
+- Only complete passing host-owned Pytest evidence establishes success. Model text cannot.
+- Public Repair models bound each editable path and reject success reasons without matching
+  baseline, attempt, and complete passing test evidence.
+- Required persistence precedes Repair work; an interrupted Repair is evidence for inspection and
+  is never automatically resumed.
+- Repair orchestration is not an OS sandbox. Approved tests and hostile concurrent host processes
+  retain the Agent user's authority, and transient change-and-restore cannot be excluded.
+
 ## [0.11.0-alpha.0] - 2026-06-30
 
 ### Added

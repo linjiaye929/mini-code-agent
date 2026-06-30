@@ -90,7 +90,7 @@ defaults are empty, Pytest performs normal discovery at the workspace root.
 The generated argv is equivalent to:
 
 ```text
-<host-python> -I -m pytest
+<host-python> -I -B -m pytest
   -q --disable-warnings --maxfail=<host-value>
   -p no:cacheprovider
   [-p <host-trusted-plugin>]...
@@ -100,13 +100,14 @@ The generated argv is equivalent to:
 
 - `create_subprocess_exec` preserves argv boundaries and never invokes a shell.
 - `-I` ignores user-site and `PYTHON*` startup influence.
+- `-B` prevents Python bytecode cache writes from making an otherwise read-only test run dirty.
 - `PYTEST_DISABLE_PLUGIN_AUTOLOAD=1` removes ambient entry-point plugins.
 - `-p no:cacheprovider` prevents the harness from creating `.pytest_cache`.
 - `--` terminates option parsing before model-selected targets.
 
-Project tests and `conftest.py` still execute. Trusted plugins are host configuration because many
-projects require plugins such as `pytest-asyncio`, but allowing the model to name one would turn
-imports into an execution primitive.
+Project tests and `conftest.py` still execute and can write files despite `-B`. Trusted plugins are
+host configuration because many projects require plugins such as `pytest-asyncio`, but allowing
+the model to name one would turn imports into an execution primitive.
 
 ## Target Validation
 

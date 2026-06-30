@@ -2,12 +2,13 @@
 
 A framework-light, provider-neutral coding agent built from first principles.
 
-> Status: pre-alpha. M4b provides a provider-neutral Agent Core, Anthropic/OpenAI-compatible
+> Status: pre-alpha. M4c provides a provider-neutral Agent Core, Anthropic/OpenAI-compatible
 > adapters, a schema-validating Tool Registry, a cross-platform Workspace boundary, bounded
 > Read/Search, conflict-aware Write/Edit, policy-governed argv command execution, and deterministic
 > context admission, hardened read-only Git evidence, governed Pytest diagnostics, versioned SQLite
-> Session/Trace persistence, and fail-closed Checkpoint/Resume. Automatic repair, OS sandboxing,
-> shell-string execution, and live-provider CI are not implemented.
+> Session/Trace persistence, fail-closed Checkpoint/Resume, and a host-controlled bounded Repair
+> loop. OS sandboxing, shell-string execution, automatic Repair resume, and live-provider CI are
+> not implemented.
 
 ## Requirements
 
@@ -136,8 +137,9 @@ with SqliteSessionTraceStore(Path("agent-state.db")) as store:
     verification = store.verify_trace(session.session_id)
 ```
 
-SQLite database schema v2 stores bounded Trace-envelope-v1 lifecycle events, Checkpoints, and
-Session/Run projections in transactional boundaries.
+SQLite database schema v3 stores bounded Trace-envelope-v1 lifecycle events, Checkpoints,
+Session/Run projections, and an independent bounded Repair lifecycle journal in transactional
+boundaries.
 The required journal records `ModelStarted` before Provider I/O and `ToolStarted` before Tool
 execution; a persistence failure stops later work. Event IDs are idempotency keys, and a
 per-Session SHA-256 chain detects inconsistent rows and projections.
@@ -176,14 +178,29 @@ See `docs/architecture/readonly-git.md`.
 workspace-relative files/directories and a reason; it cannot choose the Python executable, cwd,
 plugins, timeout, report path, environment, or arbitrary options.
 
-The fixed argv uses isolated Python startup, disables ambient plugin autoload and `.pytest_cache`,
-places `--` before targets, and converts bounded built-in JUnit XML into typed process/report
-statuses, counts, and diagnostics. Execute remains denied by default and requires an explicit
-policy rule plus approval.
+The fixed argv uses isolated Python startup, disables bytecode and `.pytest_cache` writes from the
+harness, disables ambient plugin autoload, places `--` before targets, and converts bounded
+built-in JUnit XML into typed process/report statuses, counts, and diagnostics. Execute remains
+denied by default and requires an explicit policy rule plus approval.
 
 Approved tests still run arbitrary repository code with the Agent process's OS permissions. This
-is governed execution, not a sandbox or an automatic Repair Loop. See
+is governed execution, not a sandbox. See
 `docs/architecture/governed-test-execution.md`.
+
+## Bounded Repair
+
+`RepairRuntime` owns one explicit feedback-control session above `AgentRuntime`. It requires a
+clean repository, an exact set of existing Git-tracked editable files, explicit approval, a
+required Repair journal, and one fixed host-owned Pytest target set. Each Agent attempt is
+restricted by `RepairActionGuard` to read operations and exact scoped writes; execute and network
+actions are denied before ordinary Policy and approval.
+
+The host validates Git status/diff and Workspace identity before accepting a patch, reruns the
+same tests, and stops only on a complete passing report or a typed safety/budget reason. Attempts,
+elapsed time, patch size, prompt size, and repeated failure fingerprints are independently
+bounded. Failed changes remain in the working tree for inspection; the runtime never stages,
+commits, resets, cleans, or automatically resumes an interrupted Repair. See
+`docs/architecture/bounded-repair-loop.md`.
 
 ## Documentation
 
@@ -201,6 +218,7 @@ is governed execution, not a sandbox or an automatic Repair Loop. See
 - Checkpoint and Resume: `docs/architecture/checkpoint-resume.md`
 - Read-only Git: `docs/architecture/readonly-git.md`
 - Governed test execution: `docs/architecture/governed-test-execution.md`
+- Bounded Repair loop: `docs/architecture/bounded-repair-loop.md`
 - Threat model: `docs/architecture/threat-model.md`
 - Provider protocol ADR: `docs/adr/0002-provider-wire-protocols.md`
 - Workspace boundary ADR: `docs/adr/0003-workspace-boundary.md`
@@ -211,6 +229,7 @@ is governed execution, not a sandbox or an automatic Repair Loop. See
 - Safe Checkpoint/Resume ADR: `docs/adr/0008-safe-checkpoint-resume.md`
 - Hardened read-only Git ADR: `docs/adr/0009-hardened-readonly-git.md`
 - Fixed Pytest/JUnit boundary ADR: `docs/adr/0010-fixed-pytest-junit-boundary.md`
+- Host-controlled bounded Repair ADR: `docs/adr/0011-host-controlled-bounded-repair.md`
 
 ## License
 

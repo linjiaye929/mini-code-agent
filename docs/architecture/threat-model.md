@@ -57,6 +57,19 @@
   unsafe file types, invalid UTF-8, DTD/entities, malformed XML, and contradictory outcomes.
 - Pytest process status remains available when its report is missing or invalid; temporary report
   cleanup runs on every exit path.
+- M4c requires explicit Repair approval, a clean repository, an exact set of existing regular
+  Git-tracked files, a matching Worker scope fingerprint, and a durable `RepairStarted` event
+  before Provider or baseline-test work.
+- `RepairActionGuard` denies execute/network and out-of-scope writes before ordinary Policy,
+  approval, and Tool execution. The coordinator alone invokes the fixed Pytest boundary.
+- Every attempt rejects staged, untracked, renamed, conflicted, submodule, branch-changing,
+  out-of-scope, empty, repeated, or oversized Git evidence. Workspace file identities are
+  revalidated around test execution.
+- Repair attempts, elapsed time, patch bytes, Worker prompt characters, and repeated canonical
+  failure fingerprints have independent hard limits. Only complete passing host test evidence
+  establishes success.
+- SQLite schema v3 stores a separate bounded hash-chained Repair lifecycle; interrupted Repair
+  rows are not automatically resumed.
 
 ## Non-claims
 
@@ -104,5 +117,15 @@
   the Workspace or host.
 - Lifecycle Trace excludes test payloads, but stable Checkpoints contain complete bounded
   ToolResults as plaintext.
+- Repair clean/tracked/scope checks are final-state observations, not isolation. Malicious tests
+  or concurrent host processes can transiently change and restore files, read host resources, or
+  bypass Tool governance.
+- `-B` prevents ordinary Python bytecode cache writes but does not make test execution read-only.
+- Repair failure leaves accepted working-tree changes for inspection. M4c does not reset, clean,
+  checkout, stash, stage, commit, or isolate work in a Worktree.
+- Repair lifecycle events exclude prompts, patches, diagnostics, stdout, stderr, and ToolResults,
+  but the separate Agent Checkpoint can contain that bounded plaintext.
+- An incomplete Repair trace is not proof that no side effect occurred, and M4c provides no
+  automatic crash Resume, rollback, or external exactly-once guarantee.
 - Configured-value scrubbing cannot detect unknown secrets, and SQLite is not encrypted at rest.
 - MCP connection does not establish trust.

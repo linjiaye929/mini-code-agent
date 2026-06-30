@@ -21,8 +21,8 @@ Add a dedicated `run_tests` Tool with `SideEffect.EXECUTE` and `RiskLevel.CRITIC
 - The host configures an absolute Python executable, timeout, failure cap, default targets, and
   trusted plugin modules.
 - The model supplies only optional workspace-relative targets and a bounded reason.
-- The harness builds one argv-only `python -I -m pytest` command.
-- Entry-point plugin autoload and Pytest cache writes are disabled.
+- The harness builds one argv-only `python -I -B -m pytest` command.
+- Entry-point plugin autoload, Python bytecode writes, and Pytest cache writes are disabled.
 - Every model target is resolved through `WorkspaceBoundary`; `--` terminates options.
 - Pytest's built-in JUnit XML is read with byte, case, diagnostic, and text limits.
 - DTD/entity declarations, malformed outcomes, unsafe files, and invalid encoding fail closed.
@@ -76,4 +76,5 @@ Negative:
 - Project `conftest.py` and tests still execute arbitrary code.
 - JUnit details are less rich than a dedicated event protocol.
 - Test code can tamper with the report; the parser guarantees bounded handling, not provenance.
-- This milestone provides diagnostics only. It does not decide or perform repairs.
+- M4b provides diagnostics only; M4c composes this boundary under a separate host-controlled
+  Repair runtime.

@@ -34,12 +34,12 @@ stdlib SQLite/SHA-256/canonical JSON, Pytest, pytest-asyncio, Ruff, strict Pyrig
 - `src/mini_code_agent/repair/runtime.py`: deterministic admission, baseline, attempt, verification,
   and stopping state machine.
 - `src/mini_code_agent/persistence/repair.py`: SQLite Repair journal/read/verify implementation.
-- `tests/unit/repair/test_models.py`: model and invariant tests.
-- `tests/unit/repair/test_fingerprint.py`: canonical fingerprint tests.
-- `tests/unit/repair/test_scope.py`: scope and action guard tests.
-- `tests/unit/repair/test_worker.py`: bounded prompt and Agent adapter tests.
-- `tests/unit/repair/test_events.py`: event model tests.
-- `tests/unit/repair/test_runtime.py`: Repair state-machine tests.
+- `tests/unit/repair/test_repair_models.py`: model and invariant tests.
+- `tests/unit/repair/test_repair_fingerprint.py`: canonical fingerprint tests.
+- `tests/unit/repair/test_repair_scope.py`: scope and action guard tests.
+- `tests/unit/repair/test_repair_worker.py`: bounded prompt and Agent adapter tests.
+- `tests/unit/repair/test_repair_events.py`: event model tests.
+- `tests/unit/repair/test_repair_runtime.py`: Repair state-machine tests.
 - `tests/unit/persistence/test_repair.py`: durable Repair journal tests.
 - `tests/integration/test_bounded_repair_agent.py`: real Git/Pytest/governed Agent repair flow.
 - `docs/architecture/bounded-repair-loop.md`: composition, state machine, security, and non-claims.
@@ -73,10 +73,10 @@ stdlib SQLite/SHA-256/canonical JSON, Pytest, pytest-asyncio, Ruff, strict Pyrig
 **Files:**
 - Create: `src/mini_code_agent/repair/models.py`
 - Create: `src/mini_code_agent/repair/fingerprint.py`
-- Create: `tests/unit/repair/test_models.py`
-- Create: `tests/unit/repair/test_fingerprint.py`
+- Create: `tests/unit/repair/test_repair_models.py`
+- Create: `tests/unit/repair/test_repair_fingerprint.py`
 
-- [ ] **Step 1: Write failing model tests**
+- [x] **Step 1: Write failing model tests**
 
 Cover limit hard caps, one-to-32 unique exact editable paths, bounded prompts/reasons, valid repair
 identifiers, `RepairResult.succeeded`, attempt ordering, and consistency between terminal reasons
@@ -96,15 +96,15 @@ def test_result_succeeds_only_for_trusted_terminal_reasons() -> None:
     assert result(RepairStopReason.MAX_ATTEMPTS).succeeded is False
 ```
 
-- [ ] **Step 2: Run the model tests and verify RED**
+- [x] **Step 2: Run the model tests and verify RED**
 
 ```powershell
-python -m uv run pytest tests/unit/repair/test_models.py -q
+python -m uv run pytest tests/unit/repair/test_repair_models.py -q
 ```
 
 Expected: collection fails because `mini_code_agent.repair.models` does not exist.
 
-- [ ] **Step 3: Implement immutable public models**
+- [x] **Step 3: Implement immutable public models**
 
 Define:
 
@@ -139,15 +139,15 @@ class RepairLimits(BaseModel):
 Add bounded `RepairRequest`, `RepairPreview`, `RepairWorkerRequest`, `TestSummary`,
 `RepairAttemptRecord`, and `RepairResult`. Use `extra="forbid"` and `frozen=True` everywhere.
 
-- [ ] **Step 4: Run model tests and verify GREEN**
+- [x] **Step 4: Run model tests and verify GREEN**
 
 ```powershell
-python -m uv run pytest tests/unit/repair/test_models.py -q
+python -m uv run pytest tests/unit/repair/test_repair_models.py -q
 ```
 
 Expected: all model tests pass.
 
-- [ ] **Step 5: Write failing fingerprint tests**
+- [x] **Step 5: Write failing fingerprint tests**
 
 ```python
 def test_failure_fingerprint_ignores_order_details_and_duration() -> None:
@@ -165,24 +165,24 @@ def test_failure_fingerprint_changes_for_message_or_status() -> None:
     )
 ```
 
-- [ ] **Step 6: Run fingerprint tests and verify RED**
+- [x] **Step 6: Run fingerprint tests and verify RED**
 
 ```powershell
-python -m uv run pytest tests/unit/repair/test_fingerprint.py -q
+python -m uv run pytest tests/unit/repair/test_repair_fingerprint.py -q
 ```
 
 Expected: import failure for `failure_sha256`.
 
-- [ ] **Step 7: Implement canonical fingerprinting**
+- [x] **Step 7: Implement canonical fingerprinting**
 
 Use `json.dumps(..., ensure_ascii=False, separators=(",", ":"), sort_keys=True)` and UTF-8
 SHA-256. Sort normalized diagnostics by outcome, file, line, class, test name, and message.
 Exclude duration, stdout, stderr, and details.
 
-- [ ] **Step 8: Run focused tests and commit**
+- [x] **Step 8: Run focused tests and commit**
 
 ```powershell
-python -m uv run pytest tests/unit/repair/test_models.py tests/unit/repair/test_fingerprint.py -q
+python -m uv run pytest tests/unit/repair/test_repair_models.py tests/unit/repair/test_repair_fingerprint.py -q
 git add src/mini_code_agent/repair/models.py src/mini_code_agent/repair/fingerprint.py tests/unit/repair
 git commit -m "feat: define bounded repair contracts"
 ```
@@ -193,7 +193,7 @@ Expected: focused tests pass and the commit succeeds.
 
 **Files:**
 - Create: `src/mini_code_agent/repair/scope.py`
-- Create: `tests/unit/repair/test_scope.py`
+- Create: `tests/unit/repair/test_repair_scope.py`
 - Modify: `src/mini_code_agent/policy/models.py`
 - Modify: `src/mini_code_agent/policy/executor.py`
 - Modify: `src/mini_code_agent/policy/__init__.py`
@@ -202,7 +202,7 @@ Expected: focused tests pass and the commit succeeds.
 - Modify: `tests/unit/policy/test_executor.py`
 - Modify: `tests/unit/git/test_git_client.py`
 
-- [ ] **Step 1: Write failing Git tracked-path tests**
+- [x] **Step 1: Write failing Git tracked-path tests**
 
 Assert the exact command contains `ls-files --error-unmatch -z --`, uses normalized exact paths,
 deduplicates neither input nor output silently, rejects missing/extra/duplicate/malformed output,
@@ -216,7 +216,7 @@ assert runner.requests[-1].argv[-6:] == (
 )
 ```
 
-- [ ] **Step 2: Run tracked-path tests and verify RED**
+- [x] **Step 2: Run tracked-path tests and verify RED**
 
 ```powershell
 python -m uv run pytest tests/unit/git/test_git_client.py -q
@@ -224,7 +224,7 @@ python -m uv run pytest tests/unit/git/test_git_client.py -q
 
 Expected: `GitClient` has no `tracked_paths`.
 
-- [ ] **Step 3: Implement hardened tracked-path evidence**
+- [x] **Step 3: Implement hardened tracked-path evidence**
 
 Add:
 
@@ -241,7 +241,7 @@ class GitService(GitStatusReader, GitDiffReader, GitTrackedPathReader, Protocol)
 Validate one-to-32 unique POSIX display paths with no NUL, invoke the fixed command, split NUL
 records, reject replacement characters and non-exact output sets, and return the requested order.
 
-- [ ] **Step 4: Run Git tests and verify GREEN**
+- [x] **Step 4: Run Git tests and verify GREEN**
 
 ```powershell
 python -m uv run pytest tests/unit/git/test_git_client.py tests/unit/git/test_git_models.py -q
@@ -249,7 +249,7 @@ python -m uv run pytest tests/unit/git/test_git_client.py tests/unit/git/test_gi
 
 Expected: all Git tests pass.
 
-- [ ] **Step 5: Write failing action-guard and scope tests**
+- [x] **Step 5: Write failing action-guard and scope tests**
 
 Add tests proving:
 
@@ -268,15 +268,15 @@ assert guard.evaluate(write_preview(resources=("src/app.py",))).allowed is True
 assert guard.evaluate(write_preview(resources=("README.md",))).allowed is False
 ```
 
-- [ ] **Step 6: Run scope/guard tests and verify RED**
+- [x] **Step 6: Run scope/guard tests and verify RED**
 
 ```powershell
-python -m uv run pytest tests/unit/repair/test_scope.py tests/unit/policy/test_executor.py -q
+python -m uv run pytest tests/unit/repair/test_repair_scope.py tests/unit/policy/test_executor.py -q
 ```
 
 Expected: missing `RepairScope`, `RepairActionGuard`, and executor guard support.
 
-- [ ] **Step 7: Implement the preview action guard**
+- [x] **Step 7: Implement the preview action guard**
 
 Add immutable `ActionGuardResult` and:
 
@@ -295,7 +295,7 @@ class AllowAllActionGuard:
 valid preview, catches guard exceptions as static `permission_denied`, and never calls policy,
 approval, or execution after denial.
 
-- [ ] **Step 8: Implement `RepairScope` and `RepairActionGuard`**
+- [x] **Step 8: Implement `RepairScope` and `RepairActionGuard`**
 
 Scope fingerprint canonical payload:
 
@@ -306,11 +306,11 @@ Scope fingerprint canonical payload:
 Only `READ_ONLY` is universally allowed. `WRITE` requires one or more resources and every resource
 must be an exact scope member. `EXECUTE` and `NETWORK` are denied.
 
-- [ ] **Step 9: Run focused tests and commit**
+- [x] **Step 9: Run focused tests and commit**
 
 ```powershell
-python -m uv run pytest tests/unit/git tests/unit/policy/test_executor.py tests/unit/repair/test_scope.py -q
-git add src/mini_code_agent/git src/mini_code_agent/policy src/mini_code_agent/repair/scope.py tests/unit/git tests/unit/policy/test_executor.py tests/unit/repair/test_scope.py
+python -m uv run pytest tests/unit/git tests/unit/policy/test_executor.py tests/unit/repair/test_repair_scope.py -q
+git add src/mini_code_agent/git src/mini_code_agent/policy src/mini_code_agent/repair/scope.py tests/unit/git tests/unit/policy/test_executor.py tests/unit/repair/test_repair_scope.py
 git commit -m "feat: enforce exact tracked repair scope"
 ```
 
@@ -321,9 +321,9 @@ Expected: focused tests pass and the commit succeeds.
 **Files:**
 - Create: `src/mini_code_agent/repair/approval.py`
 - Create: `src/mini_code_agent/repair/worker.py`
-- Create: `tests/unit/repair/test_worker.py`
+- Create: `tests/unit/repair/test_repair_worker.py`
 
-- [ ] **Step 1: Write failing approval and worker tests**
+- [x] **Step 1: Write failing approval and worker tests**
 
 Test static approve/deny recording, approval handler exceptions, worker scope marker, deterministic
 run IDs, canonical bounded request envelope, and rejection when the fixed instruction plus request
@@ -336,15 +336,15 @@ assert json.loads(extract_envelope(runtime.calls[0].user_prompt))["attempt"] == 
 assert result.stop_reason is StopReason.COMPLETED
 ```
 
-- [ ] **Step 2: Run tests and verify RED**
+- [x] **Step 2: Run tests and verify RED**
 
 ```powershell
-python -m uv run pytest tests/unit/repair/test_worker.py -q
+python -m uv run pytest tests/unit/repair/test_repair_worker.py -q
 ```
 
 Expected: missing approval and worker modules.
 
-- [ ] **Step 3: Implement approval contracts**
+- [x] **Step 3: Implement approval contracts**
 
 ```python
 class RepairApprovalHandler(Protocol):
@@ -363,7 +363,7 @@ class StaticRepairApprovalHandler:
 
 Also provide `DenyAllRepairApprovalHandler`.
 
-- [ ] **Step 4: Implement the worker protocol and adapter**
+- [x] **Step 4: Implement the worker protocol and adapter**
 
 Use a narrow runtime protocol instead of depending on a concrete class:
 
@@ -383,11 +383,11 @@ class RepairWorker(Protocol):
 Serialize only bounded test summaries, not stdout/stderr. Build one fixed instruction and canonical
 JSON envelope. Validate the complete prompt length before invoking the Agent.
 
-- [ ] **Step 5: Run tests and commit**
+- [x] **Step 5: Run tests and commit**
 
 ```powershell
-python -m uv run pytest tests/unit/repair/test_worker.py -q
-git add src/mini_code_agent/repair/approval.py src/mini_code_agent/repair/worker.py tests/unit/repair/test_worker.py
+python -m uv run pytest tests/unit/repair/test_repair_worker.py -q
+git add src/mini_code_agent/repair/approval.py src/mini_code_agent/repair/worker.py tests/unit/repair/test_repair_worker.py
 git commit -m "feat: adapt agent repair attempts"
 ```
 
@@ -397,9 +397,9 @@ Expected: all worker tests pass.
 
 **Files:**
 - Create: `src/mini_code_agent/repair/events.py`
-- Create: `tests/unit/repair/test_events.py`
+- Create: `tests/unit/repair/test_repair_events.py`
 
-- [ ] **Step 1: Write failing event tests**
+- [x] **Step 1: Write failing event tests**
 
 Cover identifiers, timestamps, attempt ranges, SHA-256 fields, bounded errors, event union
 round-trips, exact duplicate recording, and terminal consistency.
@@ -414,15 +414,15 @@ journal.append(event)
 assert journal.events == [event]
 ```
 
-- [ ] **Step 2: Run tests and verify RED**
+- [x] **Step 2: Run tests and verify RED**
 
 ```powershell
-python -m uv run pytest tests/unit/repair/test_events.py -q
+python -m uv run pytest tests/unit/repair/test_repair_events.py -q
 ```
 
 Expected: missing Repair event types.
 
-- [ ] **Step 3: Implement event family and journal protocol**
+- [x] **Step 3: Implement event family and journal protocol**
 
 Create `RepairStarted`, `RepairAttemptStarted`, `RepairVerificationStarted`,
 `RepairAttemptCompleted`, and `RepairStopped`, all frozen and extra-forbid. Define:
@@ -444,11 +444,11 @@ class RepairJournal(Protocol):
 Provide `NullRepairJournal` and `RecordingRepairJournal`. Lifecycle events contain only hashes,
 counts, statuses, IDs, attempts, elapsed time, and a bounded static error.
 
-- [ ] **Step 4: Run tests and commit**
+- [x] **Step 4: Run tests and commit**
 
 ```powershell
-python -m uv run pytest tests/unit/repair/test_events.py -q
-git add src/mini_code_agent/repair/events.py tests/unit/repair/test_events.py
+python -m uv run pytest tests/unit/repair/test_repair_events.py -q
+git add src/mini_code_agent/repair/events.py tests/unit/repair/test_repair_events.py
 git commit -m "feat: define repair lifecycle events"
 ```
 
@@ -466,7 +466,7 @@ Expected: all event tests pass.
 - Modify: `tests/unit/persistence/test_schema.py`
 - Modify: `tests/unit/persistence/test_store.py`
 
-- [ ] **Step 1: Write failing schema v3 tests**
+- [x] **Step 1: Write failing schema v3 tests**
 
 Assert fresh creation includes `repair_runs` and `repair_events`, v1 and v2 migrate without
 rewriting existing rows, failed migration rolls back new objects/version, and future version 4 is
@@ -477,7 +477,7 @@ assert version == DATABASE_SCHEMA_VERSION == 3
 assert {"repair_runs", "repair_events"} <= tables
 ```
 
-- [ ] **Step 2: Run schema tests and verify RED**
+- [x] **Step 2: Run schema tests and verify RED**
 
 ```powershell
 python -m uv run pytest tests/unit/persistence/test_schema.py -q
@@ -485,7 +485,7 @@ python -m uv run pytest tests/unit/persistence/test_schema.py -q
 
 Expected: schema version remains 2 and Repair tables are absent.
 
-- [ ] **Step 3: Implement sequential v1/v2 to v3 migration**
+- [x] **Step 3: Implement sequential v1/v2 to v3 migration**
 
 Add:
 
@@ -520,7 +520,7 @@ CREATE TABLE repair_events (
 Run migrations sequentially: v1 adds checkpoints, then v2 adds Repair tables, then verifies all
 required tables.
 
-- [ ] **Step 4: Run schema tests and verify GREEN**
+- [x] **Step 4: Run schema tests and verify GREEN**
 
 ```powershell
 python -m uv run pytest tests/unit/persistence/test_schema.py -q
@@ -528,14 +528,14 @@ python -m uv run pytest tests/unit/persistence/test_schema.py -q
 
 Expected: schema tests pass.
 
-- [ ] **Step 5: Write failing journal tests**
+- [x] **Step 5: Write failing journal tests**
 
 Cover required start-first transitions, attempt ordering, start/verification/completion sequence,
 terminal stop, no events after stop, event-ID idempotency/conflict, timestamp order, size/event
 limits, busy timeout, four payload/hash/projection tamper cases, reopen/read pagination, and
 started-only incomplete detection.
 
-- [ ] **Step 6: Run journal tests and verify RED**
+- [x] **Step 6: Run journal tests and verify RED**
 
 ```powershell
 python -m uv run pytest tests/unit/persistence/test_repair.py -q
@@ -543,7 +543,7 @@ python -m uv run pytest tests/unit/persistence/test_repair.py -q
 
 Expected: missing SQLite Repair journal.
 
-- [ ] **Step 7: Implement canonical Repair codec and journal**
+- [x] **Step 7: Implement canonical Repair codec and journal**
 
 `repair.py` must:
 
@@ -556,7 +556,7 @@ Expected: missing SQLite Repair journal.
 - validate chain/projection during reads and verification;
 - redact only the bounded `RepairStopped.error` using configured secrets.
 
-- [ ] **Step 8: Add store accessors**
+- [x] **Step 8: Add store accessors**
 
 Expose:
 
@@ -568,7 +568,7 @@ store.verify_repair_trace(repair_id)
 
 Return typed `RepairTraceRecord` and `RepairTraceVerification`.
 
-- [ ] **Step 9: Run persistence tests and commit**
+- [x] **Step 9: Run persistence tests and commit**
 
 ```powershell
 python -m uv run pytest tests/unit/persistence -q
@@ -582,9 +582,9 @@ Expected: all persistence tests pass.
 
 **Files:**
 - Create: `src/mini_code_agent/repair/runtime.py`
-- Create: `tests/unit/repair/test_runtime.py`
+- Create: `tests/unit/repair/test_repair_runtime.py`
 
-- [ ] **Step 1: Write failing admission tests**
+- [x] **Step 1: Write failing admission tests**
 
 Build recording fake Git/Pytest/worker/approval/journal dependencies. Cover:
 
@@ -607,21 +607,21 @@ assert worker.calls == []
 assert pytest.calls == [("tests",)]
 ```
 
-- [ ] **Step 2: Run admission tests and verify RED**
+- [x] **Step 2: Run admission tests and verify RED**
 
 ```powershell
-python -m uv run pytest tests/unit/repair/test_runtime.py -q
+python -m uv run pytest tests/unit/repair/test_repair_runtime.py -q
 ```
 
 Expected: missing `RepairRuntime`.
 
-- [ ] **Step 3: Implement constructor and dependency protocols**
+- [x] **Step 3: Implement constructor and dependency protocols**
 
 Add narrow protocols for Git, tests, clock, and worker. Require identical resolved Workspace,
 Git, and Pytest roots. Require a journal unless `allow_volatile=True`; in volatile mode install
 `NullRepairJournal`.
 
-- [ ] **Step 4: Implement approval and admission**
+- [x] **Step 4: Implement approval and admission**
 
 Order:
 
@@ -637,17 +637,17 @@ Order:
 
 Convert expected failures to static typed results; propagate `CancelledError`.
 
-- [ ] **Step 5: Implement baseline test evidence**
+- [x] **Step 5: Implement baseline test evidence**
 
 Read status and unstaged diff immediately before and after `PytestRunner.run`. Require both hashes
 unchanged. Classify only complete exit-1 failures with at least one failed/error case as
 repairable. Return already-passing only for complete exit-0 reports.
 
-- [ ] **Step 6: Run admission tests and commit**
+- [x] **Step 6: Run admission tests and commit**
 
 ```powershell
-python -m uv run pytest tests/unit/repair/test_runtime.py -q
-git add src/mini_code_agent/repair/runtime.py tests/unit/repair/test_runtime.py
+python -m uv run pytest tests/unit/repair/test_repair_runtime.py -q
+git add src/mini_code_agent/repair/runtime.py tests/unit/repair/test_repair_runtime.py
 git commit -m "feat: admit bounded repair sessions"
 ```
 
@@ -657,9 +657,9 @@ Expected: admission/baseline tests pass.
 
 **Files:**
 - Modify: `src/mini_code_agent/repair/runtime.py`
-- Modify: `tests/unit/repair/test_runtime.py`
+- Modify: `tests/unit/repair/test_repair_runtime.py`
 
-- [ ] **Step 1: Write failing attempt-loop tests**
+- [x] **Step 1: Write failing attempt-loop tests**
 
 Cover one-attempt success, worker non-completion/exception, no diff, repeated diff, ordinary exact
 modification, staged/new/deleted/renamed/unmerged/submodule/out-of-scope changes, patch limit,
@@ -673,39 +673,39 @@ assert result.attempts[0].worker_run_id == "repair-1-attempt-1"
 assert result.final_test.status is PytestExecutionStatus.PASSED
 ```
 
-- [ ] **Step 2: Run attempt tests and verify RED**
+- [x] **Step 2: Run attempt tests and verify RED**
 
 ```powershell
-python -m uv run pytest tests/unit/repair/test_runtime.py -q
+python -m uv run pytest tests/unit/repair/test_repair_runtime.py -q
 ```
 
 Expected: attempt assertions fail because runtime stops after baseline.
 
-- [ ] **Step 3: Implement worker-attempt validation**
+- [x] **Step 3: Implement worker-attempt validation**
 
 Before each worker and test boundary, compare monotonic elapsed time. Persist
 `RepairAttemptStarted`; call one worker; require `StopReason.COMPLETED`; read status/staged and
 unstaged diff; enforce only ordinary unstaged `M` entries exactly within scope; require non-empty,
 new, bounded diff.
 
-- [ ] **Step 4: Implement verification and stall detection**
+- [x] **Step 4: Implement verification and stall detection**
 
 Persist `RepairVerificationStarted`, run the original targets, verify test non-mutation, create one
 immutable attempt record, then persist `RepairAttemptCompleted`. Count canonical failure hashes
 including baseline. Return `REPEATED_FAILURE` at the configured count and `MAX_ATTEMPTS` only after
 recording the final distinct repairable failure.
 
-- [ ] **Step 5: Implement fail-closed stopping**
+- [x] **Step 5: Implement fail-closed stopping**
 
 Every ordinary return must append one `RepairStopped`. If that append fails, return
 `PERSISTENCE_ERROR` without attempting a second terminal append. Bound public errors to 500
 characters and never include dependency exception text. Cancellation bypasses result creation.
 
-- [ ] **Step 6: Run Repair unit tests and commit**
+- [x] **Step 6: Run Repair unit tests and commit**
 
 ```powershell
 python -m uv run pytest tests/unit/repair -q
-git add src/mini_code_agent/repair/runtime.py tests/unit/repair/test_runtime.py
+git add src/mini_code_agent/repair/runtime.py tests/unit/repair/test_repair_runtime.py
 git commit -m "feat: orchestrate bounded repair attempts"
 ```
 
@@ -720,7 +720,7 @@ Expected: all Repair unit tests pass.
 - Modify: `src/mini_code_agent/policy/__init__.py`
 - Modify: `src/mini_code_agent/git/__init__.py`
 
-- [ ] **Step 1: Write failing end-to-end repair test**
+- [x] **Step 1: Write failing end-to-end repair test**
 
 Create a temporary Git repository with:
 
@@ -745,7 +745,7 @@ and a failing test expecting addition. Compose:
 Assert trusted pass, only `src/calculator.py` changed, no staged/new files, one worker run, one repair
 attempt, valid Agent trace, valid Repair trace, and no patch/test output in Repair lifecycle rows.
 
-- [ ] **Step 2: Run integration test and verify RED**
+- [x] **Step 2: Run integration test and verify RED**
 
 ```powershell
 python -m uv run pytest tests/integration/test_bounded_repair_agent.py -q
@@ -753,12 +753,12 @@ python -m uv run pytest tests/integration/test_bounded_repair_agent.py -q
 
 Expected: public Repair composition or runtime behavior is incomplete.
 
-- [ ] **Step 3: Complete public exports and integration**
+- [x] **Step 3: Complete public exports and integration**
 
 Export only stable models, protocols, runtime, worker, scope guard, approval handlers, events, and
 SQLite Repair types. Avoid importing heavy runtime modules through unrelated package roots.
 
-- [ ] **Step 4: Add adversarial integration cases**
+- [x] **Step 4: Add adversarial integration cases**
 
 Add real tests for:
 
@@ -768,7 +768,7 @@ Add real tests for:
 - a test modifies a tracked file and triggers `test_mutated_repository`;
 - interrupted started-only SQLite Repair trace reopens as incomplete and is never replayed.
 
-- [ ] **Step 5: Run integration and regression suites**
+- [x] **Step 5: Run integration and regression suites**
 
 ```powershell
 python -m uv run pytest tests/integration/test_bounded_repair_agent.py tests/integration/test_governed_pytest_agent.py tests/integration/test_readonly_git_agent.py tests/integration/test_governed_write_agent.py -q
@@ -777,7 +777,7 @@ python -m uv run pytest tests/unit/repair tests/unit/git tests/unit/policy tests
 
 Expected: all focused integration/regression tests pass.
 
-- [ ] **Step 6: Commit**
+- [x] **Step 6: Commit**
 
 ```powershell
 git add src/mini_code_agent/repair src/mini_code_agent/git/__init__.py src/mini_code_agent/policy/__init__.py src/mini_code_agent/persistence/__init__.py tests/integration/test_bounded_repair_agent.py
@@ -801,13 +801,13 @@ Expected: commit succeeds.
 - Modify: `pyproject.toml`
 - Modify: `uv.lock`
 
-- [ ] **Step 1: Write architecture and ADR**
+- [x] **Step 1: Write architecture and ADR**
 
 Document exact composition, approval boundary, clean/tracked scope admission, action guard, test
 classification, Git evidence checks, canonical failure fingerprint, attempt state machine,
 required Repair journal, crash non-resume rule, and all design non-claims.
 
-- [ ] **Step 2: Update learning and resume documents in parallel**
+- [x] **Step 2: Update learning and resume documents in parallel**
 
 Learning document must explain:
 
@@ -826,13 +826,13 @@ Why needed | Technical implementation | Function | Problem solved | Evidence
 
 Do not claim benchmark improvement until a fixed defect suite exists and is measured.
 
-- [ ] **Step 3: Update version and smoke contract**
+- [x] **Step 3: Update version and smoke contract**
 
 Set `pyproject.toml` to `0.12.0a0`, regenerate `uv.lock`, import `RepairRuntime`,
 `AgentRepairWorker`, and `RepairActionGuard` in `tests/smoke_test.py`, and add an
 `[0.12.0-alpha.0]` changelog section.
 
-- [ ] **Step 4: Run all local quality gates**
+- [x] **Step 4: Run all local quality gates**
 
 ```powershell
 python -m uv lock --check
@@ -848,7 +848,7 @@ python -m pip_audit --strict --desc
 Expected: lock current; all tests pass on both Python versions; branch coverage is at least 85%;
 Ruff, strict Pyright, Bandit, and dependency audit report no failures.
 
-- [ ] **Step 5: Build and smoke exact artifacts**
+- [x] **Step 5: Build and smoke exact artifacts**
 
 Build wheel and sdist with `build-constraints.txt --require-hashes`, compute SHA-256, install each
 artifact separately on Python 3.12 and 3.13, run `tests/smoke_test.py`, and verify
