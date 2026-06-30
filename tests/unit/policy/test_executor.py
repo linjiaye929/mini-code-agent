@@ -8,6 +8,15 @@ import pytest
 from pydantic import JsonValue
 
 from mini_code_agent.domain.content import ToolCall, ToolResult
+from mini_code_agent.hooks.models import (
+    HookDecision,
+    HookPhase,
+    HookSource,
+    PostToolHookContext,
+    PreToolHookResult,
+    ToolHookContext,
+)
+from mini_code_agent.hooks.runner import HookRegistration, ToolHookRunner
 from mini_code_agent.policy.approval import (
     ApprovalHandler,
     DenyAllApprovalHandler,
@@ -351,3 +360,154 @@ async def test_omitted_action_guard_preserves_existing_behavior() -> None:
 
     assert result.is_error is False
     assert tool.calls == [call(name="read_test")]
+
+
+class StaticPreHook:
+    def __init__(
+        self,
+        decision: HookDecision,
+        *,
+        error: BaseException | None = None,
+    ) -> None:
+        self.decision = decision
+        self.error = error
+        self.contexts: list[ToolHookContext] = []
+
+    async def before_tool(self, context: ToolHookContext) -> PreToolHookResult:
+        self.contexts.append(context)
+        if self.error is not None:
+            raise self.error
+        return PreToolHookResult(decision=self.decision)
+
+
+class RecordingPostHook:
+    def __init__(self, *, error: BaseException | None = None) -> None:
+        self.error = error
+        self.contexts: list[PostToolHookContext] = []
+
+    async def after_tool(self, context: PostToolHookContext) -> None:
+        self.contexts.append(context)
+        if self.error is not None:
+            raise self.error
+
+
+def hook_runner(
+    *,
+    pre: StaticPreHook | None = None,
+    post: RecordingPostHook | None = None,
+) -> ToolHookRunner:
+    registrations: list[HookRegistration] = []
+    if pre is not None:
+        registrations.append(
+            HookRegistration(
+                hook_id="pre-check",
+                source=HookSource.MANAGED,
+                priority=0,
+                phase=HookPhase.PRE_TOOL,
+                handler=pre,
+            )
+        )
+    if post is not None:
+        registrations.append(
+            HookRegistration(
+                hook_id="post-observer",
+                source=HookSource.MANAGED,
+                priority=0,
+                phase=HookPhase.POST_TOOL,
+                handler=post,
+            )
+        )
+    return ToolHookRunner(registrations)
+
+
+@pytest.mark.asyncio
+async def test_pre_hook_block_happens_before_policy_approval_and_execution() -> None:
+    tool = RecordingTool(name="write_file", side_effect=SideEffect.WRITE)
+    approval = StaticApprovalHandler(approved=True)
+    pre = StaticPreHook(HookDecision.BLOCK)
+    executor = GovernedToolExecutor(
+        ToolRegistry([tool]),
+        policy=PolicyEngine(),
+        approval=approval,
+        session_mode=SessionMode.INTERACTIVE,
+        trust_source=TrustSource.MODEL,
+        hooks=hook_runner(pre=pre),
+    )
+
+    result = await executor.execute(call())
+
+    assert error_code(result) == "permission_denied"
+    assert len(pre.contexts) == 1
+    assert approval.requests == []
+    assert tool.calls == []
+
+
+@pytest.mark.asyncio
+async def test_hook_continue_cannot_bypass_policy_deny() -> None:
+    tool = RecordingTool(name="write_file", side_effect=SideEffect.WRITE)
+    pre = StaticPreHook(HookDecision.CONTINUE)
+    post = RecordingPostHook()
+    executor = GovernedToolExecutor(
+        ToolRegistry([tool]),
+        policy=PolicyEngine(
+            rules=(
+                PolicyRule(
+                    id="deny-write",
+                    decision=PolicyDecision.DENY,
+                    rationale="Writes disabled.",
+                    side_effect=SideEffect.WRITE,
+                ),
+            )
+        ),
+        approval=StaticApprovalHandler(approved=True),
+        session_mode=SessionMode.INTERACTIVE,
+        trust_source=TrustSource.MODEL,
+        hooks=hook_runner(pre=pre, post=post),
+    )
+
+    result = await executor.execute(call())
+
+    assert error_code(result) == "permission_denied"
+    assert len(pre.contexts) == 1
+    assert post.contexts == []
+    assert tool.calls == []
+
+
+@pytest.mark.asyncio
+async def test_post_hook_observes_execution_without_replacing_result() -> None:
+    tool = RecordingTool(name="read_test", side_effect=SideEffect.READ_ONLY)
+    post = RecordingPostHook(error=RuntimeError("observer-secret"))
+    executor = GovernedToolExecutor(
+        ToolRegistry([tool]),
+        policy=PolicyEngine(),
+        approval=DenyAllApprovalHandler(),
+        session_mode=SessionMode.INTERACTIVE,
+        trust_source=TrustSource.MODEL,
+        hooks=hook_runner(post=post),
+    )
+
+    result = await executor.execute(call(name="read_test"))
+
+    assert result == ToolResult(tool_call_id="call-1", content='{"ok":true}')
+    assert len(post.contexts) == 1
+    assert post.contexts[0].result is result
+    assert tool.calls == [call(name="read_test")]
+
+
+@pytest.mark.asyncio
+async def test_hook_cancellation_propagates_without_tool_execution() -> None:
+    tool = RecordingTool(name="read_test", side_effect=SideEffect.READ_ONLY)
+    pre = StaticPreHook(HookDecision.CONTINUE, error=asyncio.CancelledError())
+    executor = GovernedToolExecutor(
+        ToolRegistry([tool]),
+        policy=PolicyEngine(),
+        approval=DenyAllApprovalHandler(),
+        session_mode=SessionMode.INTERACTIVE,
+        trust_source=TrustSource.MODEL,
+        hooks=hook_runner(pre=pre),
+    )
+
+    with pytest.raises(asyncio.CancelledError):
+        await executor.execute(call(name="read_test"))
+
+    assert tool.calls == []

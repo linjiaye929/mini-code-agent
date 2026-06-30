@@ -5,6 +5,8 @@ import json
 from typing import Literal, Protocol, cast
 
 from mini_code_agent.domain.content import ToolCall, ToolResult
+from mini_code_agent.hooks.models import PostToolHookContext, ToolHookContext
+from mini_code_agent.hooks.runner import ToolHookRunner
 from mini_code_agent.policy.approval import ApprovalHandler
 from mini_code_agent.policy.engine import PolicyEngine
 from mini_code_agent.policy.models import (
@@ -35,6 +37,7 @@ class GovernedToolExecutor:
         session_mode: SessionMode,
         trust_source: TrustSource,
         guard: ActionGuard | None = None,
+        hooks: ToolHookRunner | None = None,
     ) -> None:
         self._registry = registry
         self._policy = policy
@@ -42,6 +45,7 @@ class GovernedToolExecutor:
         self._session_mode = session_mode
         self._trust_source = trust_source
         self._guard = guard
+        self._hooks = hooks
 
     @property
     def governance_enforced(self) -> Literal[True]:
@@ -78,6 +82,17 @@ class GovernedToolExecutor:
                 return self._permission_denied(call.id)
             if not guard_result.allowed:
                 return self._permission_denied(call.id)
+        hook_context = ToolHookContext(
+            call=call,
+            definition=definition,
+            preview=preview,
+            session_mode=self._session_mode,
+            trust_source=self._trust_source,
+        )
+        if self._hooks is not None:
+            hook_result = await self._hooks.before_tool(hook_context)
+            if not hook_result.allowed:
+                return self._permission_denied(call.id)
         policy_result = self._policy.evaluate(
             PolicyRequest(
                 tool_name=call.name,
@@ -112,7 +127,15 @@ class GovernedToolExecutor:
                 )
             if not approved:
                 return self._permission_denied(call.id)
-        return await self._registry.execute(call)
+        result = await self._registry.execute(call)
+        if self._hooks is not None:
+            await self._hooks.after_tool(
+                PostToolHookContext(
+                    **hook_context.model_dump(),
+                    result=result,
+                )
+            )
+        return result
 
     async def _preview(
         self,
