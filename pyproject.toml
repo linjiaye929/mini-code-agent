@@ -26,6 +26,7 @@ dependencies = [
     "platformdirs>=4.3,<5",
     "pydantic>=2.10,<3",
     "pydantic-settings>=2.7,<3",
+    "pyyaml>=6.0.2,<7",
     "rich>=13.9,<15",
     "typer>=0.15,<1",
 ]
@@ -47,6 +48,7 @@ dev = [
     "pytest-cov>=6,<8",
     "ruff>=0.9",
     "types-defusedxml>=0.7.0.20260504,<0.8",
+    "types-pyyaml>=6.0.12.20250516,<7",
 ]
 
 [tool.hatch.build.targets.wheel]
