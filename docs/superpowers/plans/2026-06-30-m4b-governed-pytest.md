@@ -245,7 +245,7 @@ git commit -m "feat: execute fixed pytest profiles"
 - Create: `src/mini_code_agent/tools/run_tests.py`
 - Modify: `src/mini_code_agent/tools/__init__.py`
 
-- [ ] **Step 1: Write failing tool schema and preview tests**
+- [x] **Step 1: Write failing tool schema and preview tests**
 
 The model-facing call is exactly:
 
@@ -263,7 +263,7 @@ ToolCall(
 Assert a closed schema, optional `targets`, required `reason`, `SideEffect.EXECUTE`,
 `RiskLevel.CRITICAL`, workspace-root cwd, validated resources, and fixed preview argv.
 
-- [ ] **Step 2: Verify RED**
+- [x] **Step 2: Verify RED**
 
 ```powershell
 python -m uv run pytest tests/unit/tools/test_run_tests.py -q
@@ -271,25 +271,25 @@ python -m uv run pytest tests/unit/tools/test_run_tests.py -q
 
 Expected: import failure for `RunTestsTool`.
 
-- [ ] **Step 3: Implement target validation and tool result**
+- [x] **Step 3: Implement target validation and tool result**
 
 Resolve each target as an existing directory or regular file using `WorkspaceBoundary`; reject
 duplicates, links, missing paths, traversal, node IDs, leading-dash path components, and target
 overflow. Use host default targets only when the model omits targets. Serialize
 `PytestRunResult.model_dump(mode="json")` as canonical compact JSON.
 
-- [ ] **Step 4: Add RED negative tests**
+- [x] **Step 4: Add RED negative tests**
 
 Cover direct execution bypassing registry validation, wrong tool name, invalid reason, file and
 directory targets, `../`, `.git`, absolute paths, links/junctions, `file.py::test_name`, `-k`,
 duplicates, and 31/32/33 targets.
 
-- [ ] **Step 5: Implement stable errors and lazy export**
+- [x] **Step 5: Implement stable errors and lazy export**
 
 Return static `invalid_arguments` or existing `WorkspaceErrorCode` values without leaking resolved
 host paths. Add `RunTestsTool` to `tools.__all__` and lazy `__getattr__`.
 
-- [ ] **Step 6: Verify and commit**
+- [x] **Step 6: Verify and commit**
 
 ```powershell
 python -m uv run pytest tests/unit/tools/test_run_tests.py tests/unit/tools/test_registry.py -q
