@@ -44,7 +44,7 @@ Ruff, strict Pyright.
 - Create: `src/mini_code_agent/testing/errors.py`
 - Create: `src/mini_code_agent/testing/__init__.py`
 
-- [ ] **Step 1: Write failing contract tests**
+- [x] **Step 1: Write failing contract tests**
 
 Cover immutable `PytestLimits`, absolute host executable validation, plugin module-name validation,
 status enums, count consistency, diagnostic text limits, and N-1/N/N+1 bounds. The intended public
@@ -73,7 +73,7 @@ result = PytestRunResult(
 )
 ```
 
-- [ ] **Step 2: Verify RED**
+- [x] **Step 2: Verify RED**
 
 Run:
 
@@ -83,13 +83,13 @@ python -m uv run pytest tests/unit/testing/test_models.py -q
 
 Expected: collection fails because `mini_code_agent.testing` does not exist.
 
-- [ ] **Step 3: Implement minimal immutable contracts**
+- [x] **Step 3: Implement minimal immutable contracts**
 
 Use `ConfigDict(extra="forbid", frozen=True)`, `StrEnum`, bounded Pydantic fields, and model
 validators. `PytestProfile.python_executable` must be absolute; trusted plugins must match
 `^[A-Za-z_][A-Za-z0-9_]*(\.[A-Za-z_][A-Za-z0-9_]*)*$`.
 
-- [ ] **Step 4: Verify GREEN and commit**
+- [x] **Step 4: Verify GREEN and commit**
 
 ```powershell
 python -m uv run pytest tests/unit/testing/test_models.py -q
@@ -393,4 +393,3 @@ Build wheel and sdist with hashes, install each artifact separately on Python 3.
 Mark every completed checkbox, commit release evidence, fast-forward merge to `main`, rerun merged
 verification, tag `v0.11.0-alpha.0`, push `main` and the tag, create a GitHub prerelease with wheel
 and sdist assets, and verify the resulting GitHub Actions run succeeds.
-
