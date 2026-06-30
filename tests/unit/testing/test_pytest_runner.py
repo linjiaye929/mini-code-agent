@@ -107,6 +107,7 @@ def test_preview_argv_has_fixed_shape_and_managed_report_marker(
     assert argv == (
         str((tmp_path / "host-python").resolve()),
         "-I",
+        "-B",
         "-m",
         "pytest",
         "-q",
@@ -134,7 +135,7 @@ def test_maximum_profile_and_targets_fit_64_argument_command_contract(
 
     argv = runner.preview_argv(tuple(f"tests/test_{index}.py" for index in range(32)))
 
-    assert len(argv) == 63
+    assert len(argv) == 64
 
 
 @pytest.mark.asyncio
@@ -155,9 +156,10 @@ async def test_runner_executes_exact_argv_and_cleans_temporary_report(
     assert request.cwd == tmp_path.resolve()
     assert request.cwd_display == "."
     assert request.timeout_seconds == 30
-    assert request.argv[:11] == (
+    assert request.argv[:12] == (
         str((tmp_path / "host-python").resolve()),
         "-I",
+        "-B",
         "-m",
         "pytest",
         "-q",
@@ -168,8 +170,8 @@ async def test_runner_executes_exact_argv_and_cleans_temporary_report(
         "-p",
         "pytest_asyncio.plugin",
     )
-    assert request.argv[11].startswith("--junitxml=")
-    assert request.argv[12:] == ("--", "tests/test_api.py")
+    assert request.argv[12].startswith("--junitxml=")
+    assert request.argv[13:] == ("--", "tests/test_api.py")
     assert report_path.exists() is False
     assert str(report_path) not in result.model_dump_json()
 

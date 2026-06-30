@@ -125,9 +125,10 @@ async def test_preview_exposes_fixed_command_and_validated_resources(
     assert preview.resources == ("tests/unit", "tests/test_api.py")
     assert preview.reason == "Verify the changed behavior."
     assert preview.command is not None
-    assert preview.command[:4] == (
+    assert preview.command[:5] == (
         str(Path(sys.executable).resolve()),
         "-I",
+        "-B",
         "-m",
         "pytest",
     )

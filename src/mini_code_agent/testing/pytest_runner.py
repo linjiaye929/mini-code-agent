@@ -112,6 +112,7 @@ class PytestRunner:
         return (
             str(self._profile.python_executable),
             "-I",
+            "-B",
             "-m",
             "pytest",
             "-q",
