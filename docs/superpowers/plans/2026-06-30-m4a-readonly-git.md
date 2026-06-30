@@ -26,7 +26,7 @@ state or invoking project-configured execution extensions.
 
 ## Task 3: Hardened Git Client
 
-**Status:** Pending
+**Status:** Complete
 
 - Reuse argv-only `CommandRunner` with Git-specific limits.
 - Verify exact non-bare repository top-level.
