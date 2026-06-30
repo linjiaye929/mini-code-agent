@@ -302,25 +302,25 @@ git commit -m "feat: add governed run tests tool"
 **Files:**
 - Create: `tests/integration/test_governed_pytest_agent.py`
 
-- [ ] **Step 1: Write policy RED tests**
+- [x] **Step 1: Write policy RED tests**
 
 Assert direct `ToolRegistry` execution can run only in the low-level contract test, while
 `GovernedToolExecutor` defaults to deny. Add explicit `ASK` policy tests for approved, rejected,
 approval failure, and non-interactive sessions.
 
-- [ ] **Step 2: Add deterministic real-project fixtures**
+- [x] **Step 2: Add deterministic real-project fixtures**
 
 Create temporary synchronous tests with one passing case and one failing case. Run the real current
 Python/Pytest executable through the governed tool and assert exit `1`, complete report, counts,
 diagnostic test name, and no report path in the payload.
 
-- [ ] **Step 3: Add AgentRuntime integration**
+- [x] **Step 3: Add AgentRuntime integration**
 
 Use `FakeProvider` to emit one `run_tests` call and then a final answer. Assert the structured tool
 result reaches the second provider request and no stdout, traceback, or report payload is persisted
 as a lifecycle Trace event.
 
-- [ ] **Step 4: Verify RED, implement only missing integration fixes, then GREEN**
+- [x] **Step 4: Verify RED, implement only missing integration fixes, then GREEN**
 
 ```powershell
 python -m uv run pytest tests/integration/test_governed_pytest_agent.py -q
@@ -329,7 +329,7 @@ python -m uv run pytest tests/integration/test_governed_pytest_agent.py -q
 Expected RED: the first missing policy/tool integration behavior fails. After minimal fixes,
 expected GREEN: all integration cases pass.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```powershell
 git add tests/integration/test_governed_pytest_agent.py src
