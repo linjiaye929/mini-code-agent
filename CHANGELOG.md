@@ -4,6 +4,44 @@ All notable changes follow Keep a Changelog. Versions follow Semantic Versioning
 
 ## [Unreleased]
 
+## [0.13.0-alpha.0] - 2026-07-01
+
+### Added
+
+- Source-qualified `managed`/`user`/`project` Skill catalog with bounded direct-child discovery,
+  conflict quarantine, disabled IDs, derived trust labels, and deterministic descriptors.
+- Restricted `SKILL.md` parser for strict UTF-8, bounded YAML frontmatter, duplicate key/alias/
+  custom tag rejection, exact Pydantic metadata, non-empty Markdown, and SemVer.
+- Fingerprint-required lazy loading that revalidates the root/directory/file hierarchy, open file
+  identity, metadata, byte count, and SHA-256 before returning `untrusted_markdown`.
+- Read-only `list_skills` and `load_skill` Agent tools with metadata-only discovery and static
+  public errors.
+- Typed host-registered pre/post Tool Hooks with stable priority/ID ordering, per-Hook timeout,
+  cancellation propagation, bounded audit records, and source labels.
+- Real Agent integration proving malicious Skill instructions cannot bypass Policy, pre-Hooks
+  block before mutation, and post-Hook failures preserve results and later observers.
+
+### Changed
+
+- `GovernedToolExecutor` now runs optional pre-Hooks after ActionGuard and before Policy, then
+  post-Hooks after Tool execution.
+- `mini_code_agent.policy` lazily exports `GovernedToolExecutor` to keep Hook models and Policy
+  contracts free of circular imports.
+- Added PyYAML as a runtime dependency and type stubs for strict development checks.
+
+### Security
+
+- Skills remain inert data and cannot register Tools, Hooks, Providers, Policy, or Python modules.
+- Cross-source names never shadow each other; duplicate qualified IDs are all quarantined.
+- Root, directory-entry, candidate, disabled-ID, file, frontmatter, body, and issue/result sizes
+  are bounded.
+- A pre-Hook can only continue to ordinary Policy or reduce authority by blocking. Timeout,
+  exception, malformed result, and audit failure fail closed.
+- Post-Hook failures are isolated after execution and cannot replace or hide the original
+  `ToolResult`.
+- In-process Hooks are trusted host code, not a sandbox. Repository command/HTTP/prompt/MCP Hooks,
+  dynamic imports, supporting Skill files, and durable Hook audit are not implemented.
+
 ## [0.12.0-alpha.0] - 2026-07-01
 
 ### Added
