@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from enum import StrEnum
-from typing import Annotated
+from typing import Annotated, Protocol
 
 from pydantic import BaseModel, ConfigDict, Field
 
@@ -83,6 +83,27 @@ class ActionPreview(BaseModel):
     resources: tuple[ResourcePath, ...] = Field(default=(), max_length=32)
     command: tuple[CommandArgument, ...] | None = Field(default=None, max_length=64)
     diff: str | None = Field(default=None, max_length=32_768)
+
+
+class ActionGuardResult(BaseModel):
+    model_config = ConfigDict(extra="forbid", frozen=True)
+
+    allowed: bool
+    public_message: str = Field(
+        default="Tool execution was not permitted.",
+        min_length=1,
+        max_length=500,
+    )
+
+
+class ActionGuard(Protocol):
+    def evaluate(self, preview: ActionPreview) -> ActionGuardResult: ...
+
+
+class AllowAllActionGuard:
+    def evaluate(self, preview: ActionPreview) -> ActionGuardResult:
+        del preview
+        return ActionGuardResult(allowed=True)
 
 
 class ApprovalRequest(BaseModel):

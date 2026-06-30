@@ -8,6 +8,7 @@ from mini_code_agent.domain.content import ToolCall, ToolResult
 from mini_code_agent.policy.approval import ApprovalHandler
 from mini_code_agent.policy.engine import PolicyEngine
 from mini_code_agent.policy.models import (
+    ActionGuard,
     ActionPreview,
     ApprovalRequest,
     PolicyDecision,
@@ -33,12 +34,14 @@ class GovernedToolExecutor:
         approval: ApprovalHandler,
         session_mode: SessionMode,
         trust_source: TrustSource,
+        guard: ActionGuard | None = None,
     ) -> None:
         self._registry = registry
         self._policy = policy
         self._approval = approval
         self._session_mode = session_mode
         self._trust_source = trust_source
+        self._guard = guard
 
     @property
     def governance_enforced(self) -> Literal[True]:
@@ -68,6 +71,13 @@ class GovernedToolExecutor:
                 "preview_failed",
                 "Tool action preview could not be created.",
             )
+        if self._guard is not None:
+            try:
+                guard_result = self._guard.evaluate(preview)
+            except Exception:
+                return self._permission_denied(call.id)
+            if not guard_result.allowed:
+                return self._permission_denied(call.id)
         policy_result = self._policy.evaluate(
             PolicyRequest(
                 tool_name=call.name,

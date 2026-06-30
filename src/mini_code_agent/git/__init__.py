@@ -4,6 +4,7 @@ from mini_code_agent.git.client import (
     GitDiffReader,
     GitService,
     GitStatusReader,
+    GitTrackedPathReader,
 )
 from mini_code_agent.git.errors import GitError, GitErrorCode
 from mini_code_agent.git.models import (
@@ -31,6 +32,7 @@ __all__ = [
     "GitStatusEntry",
     "GitStatusReader",
     "GitStatusSnapshot",
+    "GitTrackedPathReader",
     "parse_porcelain_v2",
     "status_sha256",
 ]

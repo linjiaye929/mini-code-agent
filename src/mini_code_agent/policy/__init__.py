@@ -6,7 +6,10 @@ from mini_code_agent.policy.approval import (
 from mini_code_agent.policy.engine import PolicyEngine
 from mini_code_agent.policy.executor import GovernedToolExecutor
 from mini_code_agent.policy.models import (
+    ActionGuard,
+    ActionGuardResult,
     ActionPreview,
+    AllowAllActionGuard,
     ApprovalRequest,
     PolicyDecision,
     PolicyRequest,
@@ -18,7 +21,10 @@ from mini_code_agent.policy.models import (
 )
 
 __all__ = [
+    "ActionGuard",
+    "ActionGuardResult",
     "ActionPreview",
+    "AllowAllActionGuard",
     "ApprovalHandler",
     "ApprovalRequest",
     "DenyAllApprovalHandler",

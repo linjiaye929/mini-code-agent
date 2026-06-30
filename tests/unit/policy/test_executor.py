@@ -16,6 +16,7 @@ from mini_code_agent.policy.approval import (
 from mini_code_agent.policy.engine import PolicyEngine
 from mini_code_agent.policy.executor import GovernedToolExecutor
 from mini_code_agent.policy.models import (
+    ActionGuardResult,
     ActionPreview,
     PolicyDecision,
     PolicyRule,
@@ -106,6 +107,7 @@ def executor_for(
     policy: PolicyEngine | None = None,
     approval: ApprovalHandler | None = None,
     session_mode: SessionMode = SessionMode.INTERACTIVE,
+    guard: object | None = None,
 ) -> GovernedToolExecutor:
     return GovernedToolExecutor(
         ToolRegistry([tool]),
@@ -113,6 +115,7 @@ def executor_for(
         approval=approval or DenyAllApprovalHandler(),
         session_mode=session_mode,
         trust_source=TrustSource.MODEL,
+        guard=guard,  # type: ignore[arg-type]
     )
 
 
@@ -286,3 +289,65 @@ def test_governed_executor_exposes_immutable_definitions_and_marker() -> None:
 
     assert executor.governance_enforced is True
     assert executor.definitions == (tool.definition,)
+
+
+class RecordingGuard:
+    def __init__(
+        self,
+        result: ActionGuardResult | None = None,
+        *,
+        error: Exception | None = None,
+    ) -> None:
+        self.result = result or ActionGuardResult(allowed=True)
+        self.error = error
+        self.previews: list[ActionPreview] = []
+
+    def evaluate(self, preview: ActionPreview) -> ActionGuardResult:
+        self.previews.append(preview)
+        if self.error is not None:
+            raise self.error
+        return self.result
+
+
+@pytest.mark.asyncio
+async def test_action_guard_denies_before_policy_approval_and_execution() -> None:
+    tool = RecordingTool(name="write_file", side_effect=SideEffect.WRITE)
+    approval = StaticApprovalHandler(approved=True)
+    guard = RecordingGuard(
+        ActionGuardResult(
+            allowed=False,
+            public_message="Repair scope denied the action.",
+        )
+    )
+    executor = executor_for(tool, approval=approval, guard=guard)
+
+    result = await executor.execute(call())
+
+    assert error_code(result) == "permission_denied"
+    assert len(guard.previews) == 1
+    assert approval.requests == []
+    assert tool.calls == []
+
+
+@pytest.mark.asyncio
+async def test_action_guard_exception_fails_closed_without_leaking() -> None:
+    tool = RecordingTool(name="read_test", side_effect=SideEffect.READ_ONLY)
+    guard = RecordingGuard(error=RuntimeError("secret-guard-error"))
+    executor = executor_for(tool, guard=guard)
+
+    result = await executor.execute(call(name="read_test"))
+
+    assert error_code(result) == "permission_denied"
+    assert "secret-guard-error" not in result.content
+    assert tool.calls == []
+
+
+@pytest.mark.asyncio
+async def test_omitted_action_guard_preserves_existing_behavior() -> None:
+    tool = RecordingTool(name="read_test", side_effect=SideEffect.READ_ONLY)
+    executor = executor_for(tool)
+
+    result = await executor.execute(call(name="read_test"))
+
+    assert result.is_error is False
+    assert tool.calls == [call(name="read_test")]

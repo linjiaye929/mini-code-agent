@@ -33,8 +33,13 @@ class GitDiffReader(Protocol):
     async def diff(self, *, staged: bool = False) -> GitDiffResult: ...
 
 
-class GitService(GitStatusReader, GitDiffReader, Protocol):
-    pass
+class GitTrackedPathReader(Protocol):
+    async def tracked_paths(self, paths: tuple[str, ...]) -> tuple[str, ...]: ...
+
+
+class GitService(GitStatusReader, GitDiffReader, GitTrackedPathReader, Protocol):
+    @property
+    def workspace_root(self) -> Path: ...
 
 
 class GitClient:
@@ -71,6 +76,10 @@ class GitClient:
             "-C",
             str(root),
         )
+
+    @property
+    def workspace_root(self) -> Path:
+        return self._root
 
     async def status(self) -> GitStatusSnapshot:
         await self._verify_repository()
@@ -118,6 +127,37 @@ class GitClient:
             char_count=len(patch),
             sha256=hashlib.sha256(encoded).hexdigest(),
         )
+
+    async def tracked_paths(self, paths: tuple[str, ...]) -> tuple[str, ...]:
+        if (
+            not 1 <= len(paths) <= 32
+            or len(set(paths)) != len(paths)
+            or any(not path or len(path) > 4096 or "\0" in path for path in paths)
+        ):
+            raise GitError(GitErrorCode.INVALID_OUTPUT)
+        await self._verify_repository()
+        output = await self._execute(
+            (
+                *self._prefix,
+                "ls-files",
+                "--error-unmatch",
+                "-z",
+                "--",
+                *(f":(top,literal){path}" for path in paths),
+            ),
+            failure_code=GitErrorCode.COMMAND_FAILED,
+        )
+        if not output.endswith("\0"):
+            raise GitError(GitErrorCode.INVALID_OUTPUT)
+        records = output[:-1].split("\0")
+        if (
+            not records
+            or any(not record for record in records)
+            or len(records) != len(set(records))
+            or set(records) != set(paths)
+        ):
+            raise GitError(GitErrorCode.INVALID_OUTPUT)
+        return paths
 
     async def _verify_repository(self) -> None:
         output = await self._execute(

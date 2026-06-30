@@ -264,3 +264,94 @@ async def test_git_diff_rejects_patch_character_limit(tmp_path: Path) -> None:
         await client.diff()
 
     assert captured.value.code is GitErrorCode.LIMIT_EXCEEDED
+
+
+@pytest.mark.asyncio
+async def test_tracked_paths_uses_exact_hardened_pathspecs(tmp_path: Path) -> None:
+    root = tmp_path.resolve()
+    runner = FakeRunner(
+        [
+            result(f"{root}\nfalse\n"),
+            result("src/a.py\0tests/test_a.py\0"),
+        ]
+    )
+    client = GitClient(root, runner=runner)
+
+    tracked = await client.tracked_paths(("src/a.py", "tests/test_a.py"))
+
+    assert client.workspace_root == root
+    assert tracked == ("src/a.py", "tests/test_a.py")
+    assert runner.requests[-1].argv[-6:] == (
+        "ls-files",
+        "--error-unmatch",
+        "-z",
+        "--",
+        ":(top,literal)src/a.py",
+        ":(top,literal)tests/test_a.py",
+    )
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    "stdout",
+    (
+        "src/a.py\0",
+        "src/a.py\0tests/test_a.py\0extra.py\0",
+        "src/a.py\0src/a.py\0tests/test_a.py\0",
+        "src/a.py\0tests/test_a.py",
+        "src/a.py\0bad\ufffd.py\0",
+    ),
+)
+async def test_tracked_paths_rejects_non_exact_or_malformed_output(
+    tmp_path: Path,
+    stdout: str,
+) -> None:
+    root = tmp_path.resolve()
+    runner = FakeRunner(
+        [
+            result(f"{root}\nfalse\n"),
+            result(stdout),
+        ]
+    )
+
+    with pytest.raises(GitError) as captured:
+        await GitClient(root, runner=runner).tracked_paths(("src/a.py", "tests/test_a.py"))
+
+    assert captured.value.code is GitErrorCode.INVALID_OUTPUT
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    "paths",
+    (
+        (),
+        ("src/a.py", "src/a.py"),
+        ("bad\0path.py",),
+        ("x" * 4_097,),
+        tuple(f"src/{index}.py" for index in range(33)),
+    ),
+)
+async def test_tracked_paths_rejects_invalid_requests(
+    tmp_path: Path,
+    paths: tuple[str, ...],
+) -> None:
+    client = GitClient(tmp_path, runner=FakeRunner([]))
+
+    with pytest.raises(GitError) as captured:
+        await client.tracked_paths(paths)
+
+    assert captured.value.code is GitErrorCode.INVALID_OUTPUT
+
+
+@pytest.mark.asyncio
+async def test_real_tracked_paths_rejects_ignored_file(tmp_path: Path) -> None:
+    root = repository(tmp_path)
+    (root / ".gitignore").write_text("ignored.txt\n", encoding="utf-8")
+    (root / "ignored.txt").write_text("ignored\n", encoding="utf-8")
+    client = GitClient(root)
+
+    assert await client.tracked_paths(("tracked.txt",)) == ("tracked.txt",)
+    with pytest.raises(GitError) as captured:
+        await client.tracked_paths(("ignored.txt",))
+
+    assert captured.value.code is GitErrorCode.COMMAND_FAILED
