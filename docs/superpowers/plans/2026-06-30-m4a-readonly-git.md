@@ -9,7 +9,7 @@ state or invoking project-configured execution extensions.
 
 ## Task 1: Git Contracts and Errors
 
-**Status:** Pending
+**Status:** Complete
 
 - Add immutable limits, status/diff models, stable error codes, canonical fingerprints.
 - Validate branch metadata, XY fields, paths, counts, and result bounds.
@@ -53,4 +53,3 @@ state or invoking project-configured execution extensions.
 - Run lock, dual-Python full tests, coverage, Ruff, strict Pyright, Bandit, pip-audit, hashed build,
   and four exact-artifact smoke tests.
 - Fast-forward merge, verify merged suite/CLI, tag, and clean the owned worktree.
-
