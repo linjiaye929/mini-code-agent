@@ -17,7 +17,7 @@ state or invoking project-configured execution extensions.
 
 ## Task 2: Porcelain-v2 Parser
 
-**Status:** Pending
+**Status:** Complete
 
 - Parse branch headers and `1`, `2`, `u`, `?` NUL records.
 - Preserve unusual valid path text while rejecting incomplete/unknown records.

@@ -8,6 +8,7 @@ from mini_code_agent.git.models import (
     GitStatusSnapshot,
     status_sha256,
 )
+from mini_code_agent.git.porcelain import parse_porcelain_v2
 
 __all__ = [
     "GitDiffMode",
@@ -18,5 +19,6 @@ __all__ = [
     "GitLimits",
     "GitStatusEntry",
     "GitStatusSnapshot",
+    "parse_porcelain_v2",
     "status_sha256",
 ]
