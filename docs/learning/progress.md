@@ -523,9 +523,13 @@
 - Bandit: no findings after using `defusedxml` for untrusted JUnit. pip-audit found no known
   vulnerabilities in the locked runtime dependency export.
 - Hashed build produced `mini_code_agent-0.11.0a0-py3-none-any.whl`
-  (`b8973c3e553a8b6f78d11a43de1b10d6d1bcc4010d003532fa209d5fe3f7c01f`) and
+  (`70570686680de139a0647a3c177831ac6335a53afcf0107128c8dbd751eac30c`) and
   `mini_code_agent-0.11.0a0.tar.gz`
-  (`240843e56f86536050e378ad1e99cae1e00bad759acc07a4346dd0e5f14acb52`).
+  (`b958037de04030428e817c2a17595088aeff287a4d12284815075d6c23e18d06`).
 - The exact wheel and sdist each passed isolated installed-package smoke tests on Python 3.12 and
   3.13, including imports of `PytestRunner` and `RunTestsTool`.
-- GitHub release and remote CI are recorded only after the `v0.11.0-alpha.0` candidate is pushed.
+- Initial remote run `28442095039` exposed two Linux assumptions: resolving a POSIX venv executable
+  erased environment identity, and opening a directory failed before `fstat`. Both received
+  focused fixes and regression coverage.
+- GitHub Actions run `28442443209` then passed quality plus Ubuntu/Windows on Python 3.12/3.13.
+  GitHub prerelease evidence is recorded after tag and artifact publication.

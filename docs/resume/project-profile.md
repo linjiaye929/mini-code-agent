@@ -4,7 +4,8 @@
 > Registry、M2b 受治理文件写入、M2c argv 命令执行与 M3a 确定性 Context Budget
 > 、M3b 版本化 Session/追加式 Trace、M3c Checkpoint/Resume、M4a hardened 只读 Git
 > 及 M4b 受治理 Pytest 诊断已完成；M4c 自动 Repair、Shell 字符串、OS 沙箱和真实凭证联调
-> 尚未实现。`v0.10.0-alpha.0` GitHub Release 与远程 CI 已成功，M4b 发布证据待版本门禁完成。
+> 尚未实现。`v0.10.0-alpha.0` GitHub Release 已发布；M4b 的本地门禁和
+> Ubuntu/Windows × Python 3.12/3.13 远程 CI 已成功，`v0.11.0-alpha.0` Release 待上传。
 >
 > 本文中的功能、性能和指标是目标或验收方案。只有得到代码、测试、CI、Benchmark 或 Release 证据后，才能改写为已完成成果。
 
@@ -87,7 +88,7 @@ Pyright；其余技术随对应里程碑落地。
 | 只读 Git 证据 | Agent 修改前后需要可靠识别用户已有变更，但普通 Git 配置可在 status/diff 中执行 fsmonitor、external diff 或 textconv | argv-only Git CLI、`--porcelain=v2 -z` 解析、exact top-level、`--no-optional-locks`、禁用 fsmonitor/ext-diff/textconv/submodule、联合输出/时间/条目/patch 上限、canonical SHA-256 | `git_status` 返回 typed branch/XY/rename/conflict/untracked；`git_diff` 返回 staged/unstaged patch | 避免 locale 文本误解析、父仓库越界、配置驱动代码执行、可选 index 写入和误将截断 patch 当完整证据 | 27 项 Git 单测、4 项 Tool 单测、1 项真实 Agent 集成；恶意扩展零执行，status/diff 前后 index 字节与纳秒 mtime 不变 |
 | 受治理 Pytest 诊断 | 文件写完不等于任务完成，但直接开放测试命令会引入任意 argv、插件和项目代码执行风险 | fixed `PytestProfile`、`python -I`、禁用 ambient plugin/cache、Workspace target、execute 默认 deny/独立审批、进程预算、`defusedxml` bounded JUnit parser、process/report 双状态 | 模型只选测试文件/目录；批准后运行真实 Pytest，返回 exit 分类、计数和有界 failure/error diagnostics，并在所有路径清理报告 | 将脆弱终端文本解析改为机器协议；区分测试失败、runner 失败、无测试和报告损坏；阻止模型控制解释器/参数/插件 | 95 项新增测试使全套达到 678 passed；真实 deny/approve/reject/non-interactive/Agent+Trace 集成通过；Python 3.12/3.13 各通过，90.25% 分支覆盖率，四组 artifact smoke |
 | 有限 Repair Loop（规划） | 诊断已可用，但自动修改和重复执行可能形成无界反馈循环或覆盖用户改动 | 轮次/时间/token/diff 预算、Git 快照、失败指纹、允许修改范围、停止原因 | 基于结构化 diagnostics 选择修复并重新验证 | 建立修改、验证、有限修复、停止的可审计闭环 | M4c 待实现；首次通过率、修复后通过率、平均修复轮次仍待固定基准实测 |
-| 质量门禁 | 企业级项目需要稳定接口和回归保护 | Ruff、严格 Pyright、Pytest、85% 核心覆盖率门槛、哈希构建约束、CI、SemVer | 自动执行 lint、类型检查、测试、构建和安装验证 | 防止低质量变更进入发布版本 | v0.11 本地：Python 3.12/3.13 各 678 通过、5 项 symlink 权限跳过，90.25% 分支覆盖率，Bandit/pip-audit 通过，四组 artifact smoke；远程 CI/Release 待候选推送 |
+| 质量门禁 | 企业级项目需要稳定接口和回归保护 | Ruff、严格 Pyright、Pytest、85% 核心覆盖率门槛、哈希构建约束、CI、SemVer | 自动执行 lint、类型检查、测试、构建和安装验证 | 防止低质量变更进入发布版本 | v0.11：Python 3.12/3.13 本地各 678 通过、5 项 symlink 权限跳过，90.25% 分支覆盖率，Bandit/pip-audit 和四组 artifact smoke 通过；GitHub Actions 的 Ubuntu/Windows × 3.12/3.13 与 quality 全成功，Release 待上传 |
 | 可扩展 Harness | Skills、Hooks、MCP、Subagent 会增加控制流复杂度 | 稳定 Protocol、EventBus、能力声明、依赖倒置 | 在不侵入 Agent Core 的前提下增加能力 | 避免扩展绕过权限、Trace 和 Session | 插件合约测试；扩展数量后续回填 |
 
 ## 6. 指标回填规则
