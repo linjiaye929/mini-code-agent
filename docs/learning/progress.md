@@ -482,6 +482,8 @@
   plugins. Profile models are immutable and validated before execution.
 - Fixed argv uses `python -I -m pytest`, disables ambient plugin autoload and Pytest cache writes,
   and places `--` before validated targets.
+- The host preserves the active `sys.executable` path. Resolving a POSIX venv symlink selects the
+  base interpreter and loses environment-local Pytest under isolated startup.
 - Execute remains denied by default. Interactive `ASK` requires independent approval;
   non-interactive `ASK`, rejection, and approval exceptions start no process.
 - Pytest exit classification is separate from JUnit report status. A missing or invalid report

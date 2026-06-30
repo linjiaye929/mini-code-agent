@@ -116,6 +116,15 @@ def parse_junit_report(
 
 
 def _read_report(path: Path, limit: int) -> bytes:
+    try:
+        initial_mode = path.lstat().st_mode
+    except FileNotFoundError:
+        raise _report_error(PytestReportErrorCode.MISSING) from None
+    except OSError:
+        raise _report_error(PytestReportErrorCode.UNSAFE) from None
+    if not stat.S_ISREG(initial_mode):
+        raise _report_error(PytestReportErrorCode.UNSAFE)
+
     flags = os.O_RDONLY | getattr(os, "O_BINARY", 0) | getattr(os, "O_NOFOLLOW", 0)
     try:
         descriptor = os.open(path, flags)

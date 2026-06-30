@@ -558,6 +558,8 @@
   配置，模型不能构造命令。
 - `python -I` 隔离用户 site 与 `PYTHON*` 启动影响；
   `PYTEST_DISABLE_PLUGIN_AUTOLOAD=1` 禁止环境中的 entry-point 插件自动扩展执行面。
+- POSIX 的 `.venv/bin/python` 可能是 symlink；不能对 `sys.executable` 调用
+  `resolve()`，否则会丢失 venv identity，`-I` 下会落到不含 Pytest 的 base Python。
 - `-p no:cacheprovider` 避免 Harness 自己创建 `.pytest_cache`；不代表测试代码只读。
 - model target 经 `WorkspaceBoundary` 解析为现存文件/目录，并在 `--` 后传给 Pytest。
 - 进程状态和报告状态拆成两个 failure domain：测试 exit code 仍可保留，即使 JUnit

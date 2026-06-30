@@ -17,6 +17,7 @@ The capability has four boundaries:
 ## Composition
 
 ```python
+import sys
 from pathlib import Path
 
 from mini_code_agent.policy import (
@@ -38,7 +39,7 @@ workspace = WorkspaceBoundary(root)
 runner = PytestRunner(
     root,
     profile=PytestProfile(
-        python_executable=Path(".venv/Scripts/python.exe").resolve(),
+        python_executable=Path(sys.executable),
         default_targets=("tests",),
         trusted_plugins=("pytest_asyncio.plugin",),
     ),
@@ -63,8 +64,9 @@ executor = GovernedToolExecutor(
 )
 ```
 
-Windows and POSIX environments need different virtual-environment executable paths. The path is
-host configuration, never a ToolCall argument.
+Use the active environment's `sys.executable` path without resolving symlinks. On POSIX, resolving
+`.venv/bin/python` can erase virtual-environment identity and select the base interpreter. The path
+is host configuration, never a ToolCall argument.
 
 ## Model and Host Control
 

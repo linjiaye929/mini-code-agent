@@ -100,7 +100,7 @@ def executor_for(
     runner = PytestRunner(
         root,
         profile=PytestProfile(
-            python_executable=Path(sys.executable).resolve(),
+            python_executable=Path(sys.executable),
             timeout_seconds=30,
             max_failures=5,
         ),
