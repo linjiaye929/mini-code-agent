@@ -35,7 +35,7 @@ async def test_runtime_info_returns_safe_structured_data() -> None:
     payload = json.loads(result.content)
     assert result.tool_call_id == "call-1"
     assert result.is_error is False
-    assert payload["package_version"] == "0.12.0a0"
+    assert payload["package_version"] == "0.13.0a0"
     assert payload["python_version"]
     assert payload["platform"]
 

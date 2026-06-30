@@ -27,7 +27,7 @@ def test_version_option_prints_package_version() -> None:
     result = runner.invoke(app, ["--version"])
 
     assert result.exit_code == 0
-    assert result.stdout.strip() == "0.12.0a0"
+    assert result.stdout.strip() == "0.13.0a0"
 
 
 def test_module_entrypoint_prints_package_version() -> None:
@@ -39,7 +39,7 @@ def test_module_entrypoint_prints_package_version() -> None:
     )
 
     assert result.returncode == 0
-    assert result.stdout.strip() == "0.12.0a0"
+    assert result.stdout.strip() == "0.13.0a0"
 
 
 def test_doctor_json_never_prints_secrets(
