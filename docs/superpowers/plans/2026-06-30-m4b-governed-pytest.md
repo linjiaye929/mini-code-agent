@@ -103,7 +103,7 @@ git commit -m "feat: define pytest execution contracts"
 - Create: `tests/unit/testing/test_junit.py`
 - Create: `src/mini_code_agent/testing/junit.py`
 
-- [ ] **Step 1: Write the first failing parser test**
+- [x] **Step 1: Write the first failing parser test**
 
 Write a UTF-8 JUnit document containing pass, failure, error, and skipped cases. Assert computed
 counts and typed diagnostics rather than aggregate XML attributes:
@@ -117,7 +117,7 @@ assert [item.outcome for item in parsed.diagnostics] == [
 ]
 ```
 
-- [ ] **Step 2: Verify RED**
+- [x] **Step 2: Verify RED**
 
 ```powershell
 python -m uv run pytest tests/unit/testing/test_junit.py -q
@@ -125,31 +125,31 @@ python -m uv run pytest tests/unit/testing/test_junit.py -q
 
 Expected: import failure for `parse_junit_report`.
 
-- [ ] **Step 3: Implement bounded read and minimal parse**
+- [x] **Step 3: Implement bounded read and minimal parse**
 
 Read at most `max_report_bytes + 1`, require a regular file, decode strict UTF-8, reject case
 insensitive `<!DOCTYPE` and `<!ENTITY`, parse only `testsuites`/`testsuite` roots, and compute counts
 from `testcase` children.
 
-- [ ] **Step 4: Verify GREEN**
+- [x] **Step 4: Verify GREEN**
 
 ```powershell
 python -m uv run pytest tests/unit/testing/test_junit.py -q
 ```
 
-- [ ] **Step 5: Add failing adversarial parser tests**
+- [x] **Step 5: Add failing adversarial parser tests**
 
 Add one focused test for each of: missing file, report size N-1/N/N+1, invalid UTF-8, malformed XML,
 DTD, entity declaration, unknown root, missing case name, contradictory outcome children,
 `max_cases + 1`, diagnostic truncation, and message/detail truncation.
 
-- [ ] **Step 6: Implement stable report statuses and limits**
+- [x] **Step 6: Implement stable report statuses and limits**
 
 Return an internal parsed-report value on success. Raise only typed `PytestReportError` values with
 codes `missing`, `invalid`, `unsafe`, and `too_large`; never include input text or paths in public
 messages.
 
-- [ ] **Step 7: Verify and commit**
+- [x] **Step 7: Verify and commit**
 
 ```powershell
 python -m uv run pytest tests/unit/testing/test_junit.py -q

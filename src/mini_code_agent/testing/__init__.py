@@ -1,4 +1,5 @@
 from mini_code_agent.testing.errors import PytestReportError, PytestReportErrorCode
+from mini_code_agent.testing.junit import parse_junit_report
 from mini_code_agent.testing.models import (
     ParsedPytestReport,
     PytestCounts,
@@ -23,4 +24,5 @@ __all__ = [
     "PytestReportErrorCode",
     "PytestReportStatus",
     "PytestRunResult",
+    "parse_junit_report",
 ]
