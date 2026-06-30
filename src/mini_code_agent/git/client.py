@@ -25,6 +25,18 @@ class GitCommandRunner(Protocol):
     async def run(self, request: CommandRequest) -> CommandResult: ...
 
 
+class GitStatusReader(Protocol):
+    async def status(self) -> GitStatusSnapshot: ...
+
+
+class GitDiffReader(Protocol):
+    async def diff(self, *, staged: bool = False) -> GitDiffResult: ...
+
+
+class GitService(GitStatusReader, GitDiffReader, Protocol):
+    pass
+
+
 class GitClient:
     def __init__(
         self,

@@ -36,7 +36,7 @@ state or invoking project-configured execution extensions.
 
 ## Task 4: Read-only Tools and Agent Integration
 
-**Status:** Pending
+**Status:** Complete
 
 - Add `git_status` and `git_diff` Tool definitions and canonical JSON results.
 - Export through the tools package and compose through Tool Registry.

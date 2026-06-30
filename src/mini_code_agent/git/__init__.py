@@ -1,4 +1,10 @@
-from mini_code_agent.git.client import GitClient, GitCommandRunner
+from mini_code_agent.git.client import (
+    GitClient,
+    GitCommandRunner,
+    GitDiffReader,
+    GitService,
+    GitStatusReader,
+)
 from mini_code_agent.git.errors import GitError, GitErrorCode
 from mini_code_agent.git.models import (
     GitDiffMode,
@@ -15,12 +21,15 @@ __all__ = [
     "GitClient",
     "GitCommandRunner",
     "GitDiffMode",
+    "GitDiffReader",
     "GitDiffResult",
     "GitEntryKind",
     "GitError",
     "GitErrorCode",
     "GitLimits",
+    "GitService",
     "GitStatusEntry",
+    "GitStatusReader",
     "GitStatusSnapshot",
     "parse_porcelain_v2",
     "status_sha256",

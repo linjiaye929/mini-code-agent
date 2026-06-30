@@ -1,5 +1,7 @@
 from typing import TYPE_CHECKING, Any
 
+from mini_code_agent.tools.git_diff import GitDiffTool
+from mini_code_agent.tools.git_status import GitStatusTool
 from mini_code_agent.tools.read_file import ReadFileTool
 from mini_code_agent.tools.registry import RegisteredTool, ToolRegistry
 from mini_code_agent.tools.search_text import SearchTextTool
@@ -11,6 +13,8 @@ if TYPE_CHECKING:
 
 __all__ = [
     "EditFileTool",
+    "GitDiffTool",
+    "GitStatusTool",
     "ReadFileTool",
     "RegisteredTool",
     "RunCommandTool",
