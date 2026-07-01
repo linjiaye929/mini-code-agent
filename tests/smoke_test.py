@@ -15,6 +15,13 @@ from mini_code_agent.repair import (
     RepairRuntime,
 )
 from mini_code_agent.skills import SkillCatalog
+from mini_code_agent.subagents import (
+    SubagentAnalysisTool,
+    SubagentLimits,
+    SubagentProfile,
+    SubagentSupervisor,
+    build_subagent_tools,
+)
 from mini_code_agent.testing import PytestRunner
 from mini_code_agent.tools import RunTestsTool
 
@@ -24,6 +31,11 @@ def verify_installed_package() -> None:
     assert RepairActionGuard.__name__ == "RepairActionGuard"
     assert RepairRuntime.__name__ == "RepairRuntime"
     assert SkillCatalog.__name__ == "SkillCatalog"
+    assert SubagentAnalysisTool.__name__ == "SubagentAnalysisTool"
+    assert SubagentLimits().max_tasks == 4
+    assert SubagentProfile.__name__ == "SubagentProfile"
+    assert SubagentSupervisor.__name__ == "SubagentSupervisor"
+    assert build_subagent_tools.__name__ == "build_subagent_tools"
     assert ToolHookRunner.__name__ == "ToolHookRunner"
     assert McpStdioClient.__name__ == "McpStdioClient"
     assert McpLimits().max_tools == 32

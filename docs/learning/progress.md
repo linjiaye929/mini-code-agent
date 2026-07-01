@@ -13,8 +13,8 @@
 | L8 Git/test/repair | Complete and released | M4a Git + M4b Pytest + M4c bounded Repair |
 | L9 Skills and Hooks | Complete and released | Inert Skills + monotonic Tool Hooks; v0.13 evidence |
 | L10 MCP | Complete and released | Governed stdio, exact grants, real SDK integration; v0.14 evidence |
-| L11 Subagent and Worktree | Not started | |
-| L12 CI, benchmark and release | In progress | v0.14 MCP prerelease and cross-platform evidence complete |
+| L11 Subagent and Worktree | M6a complete locally; M6b not started | Host-profiled read-only Subagents, TaskGroup, real parent/child integration |
+| L12 CI, benchmark and release | In progress | v0.14 released; v0.15 local quality/security gates complete |
 
 ## L0 Notes
 
@@ -716,3 +716,72 @@
   `1af6a07632abe291ac4adc0ccb04aaa1be5c7d38`。非 draft GitHub prerelease
   <https://github.com/linjiayebat/mini-code-agent/releases/tag/v0.14.0-alpha.0> 已发布，
   远端 asset name、size 和 GitHub SHA-256 digest 与上述本地 smoke 制品完全一致。
+
+## M6a Governed Analysis Subagent Notes
+
+- M6a 只实现分析 delegation，不实现 child 写入。宿主 `SubagentProfile` 固定 parent local
+  Tool、child system prompt、exact read-only Tool names、Agent limits、Task/timeout/
+  summary/evidence/result budgets；模型只能提交 bounded unique tasks 和 reason。
+- child 不是 parent context fork。每个 `AgentRuntime` 从一个 fresh user message 开始，
+  不继承 parent/sibling transcript，因此 context attribution 更清晰，但不能据此宣称
+  OS、内存、Provider 凭证或数据隔离。
+- 所有 child ID 在工厂调用前一次性生成并验证唯一。Provider 和 governed Tool executor
+  必须逐 child 独立，Tool definition 顺序必须与 profile 完全一致，全部为 `READ_ONLY`，
+  `governance_enforced is True`，且 provenance 为 `TrustSource.SUBAGENT`。
+- profile 拒绝任何 `delegate_` child Tool；`build_subagent_tools()` 再拒绝 duplicate
+  profile ID/local name 和跨 profile parent-local/child-name 冲突，避免形成递归能力图。
+- 一个 `asyncio.TaskGroup` 拥有全部 child Task；Semaphore 只限制 active concurrency，
+  ordinal slots 单独保证 output order。代码没有 detached Task、daemon thread 或后台进程。
+- child timeout/failure 只生成该 ordinal 的 typed result，sibling 继续；outer batch timeout
+  取消未完成 Task 并填充 `BATCH_TIMED_OUT`。外部 `CancelledError` 在 child、Supervisor 和
+  parent Tool 路径显式 re-raise。
+- child 固定 `NON_INTERACTIVE`，因此 Policy `ASK` 不会弹出嵌套审批，而是 fail closed。
+  parent delegation Policy 与 child Tool Policy 是两次独立判断。
+- `untrusted_summary` 只做长度/NUL边界，不是证据。Evidence 只保留 ToolCall ID/name、
+  error、content character count 与 ToolResult UTF-8 SHA-256，不复制参数或原始结果。
+- Subagent events 只含 parent call ID、profile、child/ordinal、status、duration、counts、
+  usage 和 result hash；task、prompt、messages、summary、arguments、ToolResult、repository
+  content 和 exception text 均不进入 event。
+- parent `SubagentAnalysisTool` 生成 profile-specific Draft 2020-12 Schema、medium-risk
+  preview 和 canonical ASCII result；最终按 UTF-8 byte budget 拒绝 oversized batch。
+- M6a 未做 token/latency/cost/quality benchmark。额外 child Provider/Tool 调用可能降低
+  parent context pressure，也可能增加成本与尾延迟，简历不能写“节省 X% token”。
+
+## M6a Review Lessons
+
+- “最多并发 N 个”不能只靠创建 N 个 detached Task；并发度和生命周期所有权是两个问题。
+  Semaphore 解决前者，TaskGroup 解决后者。
+- `CancelledError` 是控制流，不是普通失败。把它转成 child failed 会让调用方无法区分用户
+  取消与业务错误，并破坏父子任务终止语义。
+- preflight 不只是 Schema。重复 child ID 如果直到 result model 才发现，Provider 已产生
+  成本，且两个 child 会共享 run ID；因此 ID tuple 必须先完整验证。
+- “只读 profile”必须验证 definition side effect、governance marker 和 provenance，不能靠
+  Tool 名称或 prompt 约定。
+- parent Tool 结果再次验证 `SubagentBatchResult`，并在最后一步按 serialized bytes 计预算；
+  Python 字符数无法代表 escaped ASCII JSON 大小。
+- Pytest 默认 import mode 会把非 package 测试目录中的同名文件当成同一顶层模块。新增
+  `tests/unit/subagents/__init__.py` 后，完整 suite 才能与既有 `test_events.py`、
+  `test_models.py`、`test_tools.py` 同时收集。
+- Worktree 能隔离 checkout 路径冲突，但不是 OS sandbox，也不自动解决 candidate adoption、
+  conflict、cleanup、rollback 或 concurrent host mutation；这些必须留给 M6b 单独设计。
+
+## M6a Local Verification
+
+- 完整 parent/child 集成使用真实 `AgentRuntime`、`GovernedToolExecutor`、
+  `ReadFileTool`/`SearchTextTool` 和 `WorkspaceBoundary`，仅 Provider 采用确定性脚本。
+- 集成证明 parent 只产生一个 delegation ToolCall、两个 child context 各只有一个 fresh
+  task message、read/search evidence hash 存在、child provenance 为 SUBAGENT、parent
+  batch ordinal 有序、event 无 task/prompt/content，且 Workspace 前后 bytes 完全一致。
+- deny case 在任何 Provider/Tool factory 前停止；递归 ToolCall 得到 `unknown_tool`；一个
+  child timeout 不影响 sibling/parent；parent cancellation 取消两个 blocked child 且 active
+  count 回到 0。
+- 安全审查增加 duplicate child ID 与 duplicate direct task 红灯回归，修复后完整
+  Subagent + integration suite 为 100 passed。
+- Python 3.12.13 在最终两条 hardening 测试加入前为 1060 passed、10 skipped、91.08%
+  branch coverage；最终 Python 3.13.14 为 1062 passed、10 skipped、91.09%。skip 均来自
+  当前 Windows 会话缺少 symlink privilege。
+- Ruff format/check、strict Pyright、Bandit 与 locked runtime pip-audit 已通过；
+  pip-audit 为 `No known vulnerabilities found`。
+- `0.15.0a0` version contract 和 installed-package Subagent API smoke 已通过。最终双版本
+  release rerun、reproducible artifact、GitHub PR/CI/tag/Release 证据留给 Task 9，当前不
+  宣称已发布。

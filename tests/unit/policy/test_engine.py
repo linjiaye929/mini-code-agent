@@ -51,6 +51,7 @@ def test_policy_enums_are_stable() -> None:
         "project",
         "model",
         "extension",
+        "subagent",
     }
 
 
@@ -137,6 +138,36 @@ def test_rule_matches_session_and_trust_source() -> None:
 
     assert allowed.rule_id == "allow-user-interactive"
     assert model_request.rule_id == "default-write"
+
+
+def test_rule_can_match_subagent_without_matching_parent_model() -> None:
+    engine = PolicyEngine(
+        rules=(
+            PolicyRule(
+                id="allow-subagent-read",
+                decision=PolicyDecision.ALLOW,
+                rationale="Bounded child reads are allowed.",
+                side_effect=SideEffect.READ_ONLY,
+                trust_source=TrustSource.SUBAGENT,
+            ),
+        )
+    )
+
+    child = engine.evaluate(
+        request(
+            side_effect=SideEffect.READ_ONLY,
+            trust_source=TrustSource.SUBAGENT,
+        )
+    )
+    parent = engine.evaluate(
+        request(
+            side_effect=SideEffect.READ_ONLY,
+            trust_source=TrustSource.MODEL,
+        )
+    )
+
+    assert child.rule_id == "allow-subagent-read"
+    assert parent.rule_id == "default-read-only"
 
 
 def test_rule_matches_side_effect_and_tool_glob() -> None:

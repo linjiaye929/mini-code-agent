@@ -34,6 +34,7 @@ class TrustSource(StrEnum):
     PROJECT = "project"
     MODEL = "model"
     EXTENSION = "extension"
+    SUBAGENT = "subagent"
 
 
 class PolicyRequest(BaseModel):

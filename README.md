@@ -2,15 +2,15 @@
 
 A framework-light, provider-neutral coding agent built from first principles.
 
-> Status: pre-alpha. M5b provides a provider-neutral Agent Core, Anthropic/OpenAI-compatible
+> Status: pre-alpha. M6a provides a provider-neutral Agent Core, Anthropic/OpenAI-compatible
 > adapters, a schema-validating Tool Registry, a cross-platform Workspace boundary, bounded
 > Read/Search, conflict-aware Write/Edit, policy-governed argv command execution, and deterministic
 > context admission, hardened read-only Git evidence, governed Pytest diagnostics, versioned SQLite
 > Session/Trace persistence, fail-closed Checkpoint/Resume, and a host-controlled bounded Repair
 > loop, provenance-aware lazy Skills, deterministic host-registered Tool Hooks, and host-pinned
-> local MCP stdio Tools. OS sandboxing, shell-string execution, project-provided executable Hooks,
-> automatic Repair resume, remote HTTP/OAuth MCP, Subagents/Worktrees, and live-provider CI are not
-> implemented.
+> local MCP stdio Tools, and bounded host-profiled read-only analysis Subagents. OS sandboxing,
+> shell-string execution, project-provided executable Hooks, automatic Repair resume, remote
+> HTTP/OAuth MCP, write-capable Subagents/Worktrees, and live-provider CI are not implemented.
 
 ## Requirements
 
@@ -236,6 +236,27 @@ approval are not OS sandboxing. Remote HTTP/OAuth, Resources, Prompts, Roots, Sa
 Elicitation, Tasks, dynamic Tool lists, and package installation are not supported. See
 `docs/architecture/governed-mcp.md`.
 
+## Governed Analysis Subagents
+
+M6a exposes one governed parent Tool per immutable host profile. The model supplies one to four
+unique bounded tasks; the host fixes the child system prompt, exact read-only Tool names, Agent
+limits, concurrency, deadlines, and result budgets.
+
+Before any child Provider request, `SubagentSupervisor` requires distinct Providers/executors,
+exact `READ_ONLY` definitions, `governance_enforced is True`, and
+`TrustSource.SUBAGENT` for every child Tool. Each child receives one fresh task message, not the
+parent or sibling transcript. Delegation Tools are structurally unavailable to children.
+
+All children belong to one `asyncio.TaskGroup`. A semaphore bounds concurrency, individual and
+batch timeouts have typed outcomes, input order is preserved, and external cancellation cancels
+and joins every child before being re-raised. Parent results contain bounded untrusted summaries
+and ToolResult metadata/SHA-256 evidence, not raw child transcripts or Tool content. Events omit
+tasks, prompts, summaries, arguments, results, repository content, and exception text.
+
+In-process context isolation is not an OS sandbox. M6a cannot write, run commands, call network
+Tools, open nested approval prompts, persist durable child traces, create Worktrees, or merge
+changes. See `docs/architecture/governed-subagents.md`.
+
 ## Documentation
 
 - Product design: `docs/superpowers/specs/2026-06-29-mini-code-agent-design.md`
@@ -255,6 +276,7 @@ Elicitation, Tasks, dynamic Tool lists, and package installation are not support
 - Bounded Repair loop: `docs/architecture/bounded-repair-loop.md`
 - Governed Skills and Hooks: `docs/architecture/governed-extensions.md`
 - Governed MCP stdio: `docs/architecture/governed-mcp.md`
+- Governed analysis Subagents: `docs/architecture/governed-subagents.md`
 - Threat model: `docs/architecture/threat-model.md`
 - Provider protocol ADR: `docs/adr/0002-provider-wire-protocols.md`
 - Workspace boundary ADR: `docs/adr/0003-workspace-boundary.md`
@@ -268,6 +290,7 @@ Elicitation, Tasks, dynamic Tool lists, and package installation are not support
 - Host-controlled bounded Repair ADR: `docs/adr/0011-host-controlled-bounded-repair.md`
 - Inert Skills and host Hooks ADR: `docs/adr/0012-inert-skills-host-hooks.md`
 - Host-pinned stdio MCP ADR: `docs/adr/0013-host-pinned-stdio-mcp.md`
+- Bounded host-profiled Subagents ADR: `docs/adr/0014-bounded-host-profiled-subagents.md`
 
 ## License
 

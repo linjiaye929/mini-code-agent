@@ -63,7 +63,7 @@ ToolRegistry, GovernedToolExecutor, Policy/Hooks, Pytest/pytest-asyncio, Ruff, s
 - Create: `src/mini_code_agent/subagents/models.py`
 - Create: `tests/unit/subagents/test_models.py`
 
-- [ ] **Step 1: Write failing provenance tests**
+- [x] **Step 1: Write failing provenance tests**
 
 Add:
 
@@ -102,7 +102,7 @@ def test_rule_can_match_subagent_without_allowing_parent_model() -> None:
     assert parent.rule_id == "default-read-only"
 ```
 
-- [ ] **Step 2: Run the provenance tests and observe red**
+- [x] **Step 2: Run the provenance tests and observe red**
 
 Run:
 
@@ -112,7 +112,7 @@ py -m uv run pytest tests/unit/policy/test_engine.py -q
 
 Expected: the stable enum assertion fails because `subagent` does not exist.
 
-- [ ] **Step 3: Add the public provenance value**
+- [x] **Step 3: Add the public provenance value**
 
 Add exactly:
 
@@ -127,7 +127,7 @@ class TrustSource(StrEnum):
 
 Run the focused Policy tests and expect all to pass.
 
-- [ ] **Step 4: Write failing profile/model tests**
+- [x] **Step 4: Write failing profile/model tests**
 
 Cover:
 
@@ -193,7 +193,7 @@ Also reject task/result/status IDs over bounds, non-static public errors, summar
 characters, evidence over 256 items, `max_tasks > 4`, `max_concurrency > 4`, child timeout over 600,
 batch timeout over 900, and batch timeout lower than child timeout.
 
-- [ ] **Step 5: Run model tests and observe collection failure**
+- [x] **Step 5: Run model tests and observe collection failure**
 
 Run:
 
@@ -203,7 +203,7 @@ py -m uv run pytest tests/unit/subagents/test_models.py -q
 
 Expected: import failure because the package does not exist.
 
-- [ ] **Step 6: Implement immutable models**
+- [x] **Step 6: Implement immutable models**
 
 Implement these stable public shapes:
 
@@ -266,7 +266,7 @@ Add bounded `SubagentEvidenceItem`, `SubagentChildResult`, `SubagentBatchResult`
 enum, and runtime error class. Freeze tuples and calculate count consistency in a model validator.
 Do not include raw task, prompt, arguments, ToolResult content, or exception text.
 
-- [ ] **Step 7: Run model, Policy, Ruff, and Pyright checks**
+- [x] **Step 7: Run model, Policy, Ruff, and Pyright checks**
 
 Run:
 
@@ -278,7 +278,7 @@ py -m uv run pyright src/mini_code_agent/subagents/models.py tests/unit/subagent
 
 Expected: all pass.
 
-- [ ] **Step 8: Commit provenance and models**
+- [x] **Step 8: Commit provenance and models**
 
 ```powershell
 git add src/mini_code_agent/policy/models.py src/mini_code_agent/subagents/__init__.py src/mini_code_agent/subagents/models.py tests/unit/policy/test_engine.py tests/unit/subagents/test_models.py
@@ -293,7 +293,7 @@ git commit -m "feat: define bounded subagent profiles"
 - Create: `tests/unit/subagents/test_contracts.py`
 - Create: `tests/unit/subagents/test_evidence.py`
 
-- [ ] **Step 1: Write failing composition tests**
+- [x] **Step 1: Write failing composition tests**
 
 Build fake factories and prove:
 
@@ -321,7 +321,7 @@ def test_validate_child_tools_rejects_authority_drift(
 Test that Provider and Tool factories receive only profile, child ID, and pinned workspace root;
 their exceptions map to one static composition error.
 
-- [ ] **Step 2: Write failing evidence tests**
+- [x] **Step 2: Write failing evidence tests**
 
 Construct a real `AgentResult` transcript with two ToolCalls and correlated ToolResults:
 
@@ -347,7 +347,7 @@ Also reject duplicate/missing correlation, result-before-call, excessive items, 
 roles, and mismatched child result IDs. Verify canonical hashes ignore dictionary insertion order
 and reject NaN/Infinity.
 
-- [ ] **Step 3: Run tests and observe red**
+- [x] **Step 3: Run tests and observe red**
 
 ```powershell
 py -m uv run pytest tests/unit/subagents/test_contracts.py tests/unit/subagents/test_evidence.py -q
@@ -355,7 +355,7 @@ py -m uv run pytest tests/unit/subagents/test_contracts.py tests/unit/subagents/
 
 Expected: missing modules/functions.
 
-- [ ] **Step 4: Implement composition protocols and validation**
+- [x] **Step 4: Implement composition protocols and validation**
 
 Define:
 
@@ -387,7 +387,7 @@ class GovernedSubagentTools(ToolExecutor, Protocol):
 `governance_enforced is True`, and `trust_source_for(name) is SUBAGENT`. Catch implementation
 exceptions and raise only `SubagentCompositionError`.
 
-- [ ] **Step 5: Implement evidence extraction and canonical hash**
+- [x] **Step 5: Implement evidence extraction and canonical hash**
 
 Walk messages in order. Register each assistant ToolCall exactly once; accept a user ToolResult only
 after its call; emit one item in ToolCall order; require every call to have one result. Hash UTF-8
@@ -408,7 +408,7 @@ def subagent_result_sha256(value: BaseModel) -> str: ...
 
 Use canonical ASCII JSON with sorted keys, compact separators, `allow_nan=False`, and SHA-256.
 
-- [ ] **Step 6: Run focused and static checks**
+- [x] **Step 6: Run focused and static checks**
 
 ```powershell
 py -m uv run pytest tests/unit/subagents/test_contracts.py tests/unit/subagents/test_evidence.py -q
@@ -416,7 +416,7 @@ py -m uv run ruff check src/mini_code_agent/subagents tests/unit/subagents
 py -m uv run pyright src/mini_code_agent/subagents tests/unit/subagents
 ```
 
-- [ ] **Step 7: Commit contracts and evidence**
+- [x] **Step 7: Commit contracts and evidence**
 
 ```powershell
 git add src/mini_code_agent/subagents/contracts.py src/mini_code_agent/subagents/evidence.py tests/unit/subagents/test_contracts.py tests/unit/subagents/test_evidence.py
@@ -431,7 +431,7 @@ git commit -m "feat: validate subagent capabilities and evidence"
 - Create: `tests/unit/subagents/test_events.py`
 - Create: `tests/unit/subagents/test_supervisor.py`
 
-- [ ] **Step 1: Write failing event tests**
+- [x] **Step 1: Write failing event tests**
 
 Require immutable bounded events:
 
@@ -472,7 +472,7 @@ def test_subagent_events_omit_task_prompt_summary_and_results() -> None:
 Round-trip all four event types through `TypeAdapter[SubagentEvent]`; reject IDs, durations, counts,
 and hashes over bounds; prove sink exceptions do not alter execution.
 
-- [ ] **Step 2: Write failing one-child supervisor tests**
+- [x] **Step 2: Write failing one-child supervisor tests**
 
 Use injected deterministic ID and monotonic factories:
 
@@ -508,19 +508,19 @@ async def test_one_child_gets_fresh_context_exact_tools_and_bounded_result(
 Also test a non-completed `StopReason`, provider factory error, Tool factory error, duplicate object
 identity, malformed AgentResult, and event order.
 
-- [ ] **Step 3: Run tests and observe red**
+- [x] **Step 3: Run tests and observe red**
 
 ```powershell
 py -m uv run pytest tests/unit/subagents/test_events.py tests/unit/subagents/test_supervisor.py -q
 ```
 
-- [ ] **Step 4: Implement Subagent events**
+- [x] **Step 4: Implement Subagent events**
 
 Keep the union separate from `AgentEvent` because parent run/turn context is unavailable at the Tool
 boundary. Add `NullSubagentEventSink` and `RecordingSubagentEventSink`. Publishing catches ordinary
 sink exceptions; cancellation is not involved because publishing is synchronous.
 
-- [ ] **Step 5: Implement child preparation and execution**
+- [x] **Step 5: Implement child preparation and execution**
 
 `SubagentSupervisor.__init__` snapshots profile/factories/root and validates the root. Before any
 Provider call, `_prepare_children()` creates all providers/executors, rejects reused object IDs,
@@ -540,7 +540,7 @@ result = await runtime.run(
 Map completed, stopped, timed-out, and failed paths to static result models. Truncate summaries by
 profile character limit before hashing. Never copy `AgentResult.messages` into a public model.
 
-- [ ] **Step 6: Run focused and static checks**
+- [x] **Step 6: Run focused and static checks**
 
 ```powershell
 py -m uv run pytest tests/unit/subagents/test_events.py tests/unit/subagents/test_supervisor.py -q
@@ -548,7 +548,7 @@ py -m uv run ruff check src/mini_code_agent/subagents tests/unit/subagents
 py -m uv run pyright src/mini_code_agent/subagents tests/unit/subagents
 ```
 
-- [ ] **Step 7: Commit the one-child lifecycle**
+- [x] **Step 7: Commit the one-child lifecycle**
 
 ```powershell
 git add src/mini_code_agent/subagents/events.py src/mini_code_agent/subagents/supervisor.py tests/unit/subagents/test_events.py tests/unit/subagents/test_supervisor.py
@@ -561,7 +561,7 @@ git commit -m "feat: run isolated subagent lifecycles"
 - Modify: `src/mini_code_agent/subagents/supervisor.py`
 - Modify: `tests/unit/subagents/test_supervisor.py`
 
-- [ ] **Step 1: Write failing concurrency tests**
+- [x] **Step 1: Write failing concurrency tests**
 
 Add deterministic gate providers:
 
@@ -599,13 +599,13 @@ Add:
 - no pending task remains after completion/cancellation;
 - completed/timed-out/failed counts and batch hash are deterministic.
 
-- [ ] **Step 2: Run concurrency tests and observe red**
+- [x] **Step 2: Run concurrency tests and observe red**
 
 ```powershell
 py -m uv run pytest tests/unit/subagents/test_supervisor.py -q -k "concurrent or timeout or cancel"
 ```
 
-- [ ] **Step 3: Implement TaskGroup fan-out/fan-in**
+- [x] **Step 3: Implement TaskGroup fan-out/fan-in**
 
 Use one result slot per input ordinal and one semaphore:
 
@@ -631,7 +631,7 @@ except TimeoutError:
 `_run_child()` wraps only its own timeout and ordinary failures. It must always re-raise
 `CancelledError`. External cancellation must not be converted into batch timeout.
 
-- [ ] **Step 4: Verify focused and complete Subagent tests**
+- [x] **Step 4: Verify focused and complete Subagent tests**
 
 ```powershell
 py -m uv run pytest tests/unit/subagents -q
@@ -639,7 +639,7 @@ py -m uv run ruff check src/mini_code_agent/subagents tests/unit/subagents
 py -m uv run pyright src/mini_code_agent/subagents tests/unit/subagents
 ```
 
-- [ ] **Step 5: Commit structured concurrency**
+- [x] **Step 5: Commit structured concurrency**
 
 ```powershell
 git add src/mini_code_agent/subagents/supervisor.py tests/unit/subagents/test_supervisor.py
@@ -653,7 +653,7 @@ git commit -m "feat: coordinate bounded subagent batches"
 - Create: `tests/unit/subagents/test_tools.py`
 - Modify: `src/mini_code_agent/subagents/__init__.py`
 
-- [ ] **Step 1: Write failing Tool tests**
+- [x] **Step 1: Write failing Tool tests**
 
 Cover:
 
@@ -691,13 +691,13 @@ oversized serialized result, supervisor failure, malformed result, and builder c
 Prove `build_subagent_tools()` rejects duplicate profile IDs/local names and any parent local name
 appearing in any child `tool_names`.
 
-- [ ] **Step 2: Run Tool tests and observe red**
+- [x] **Step 2: Run Tool tests and observe red**
 
 ```powershell
 py -m uv run pytest tests/unit/subagents/test_tools.py -q
 ```
 
-- [ ] **Step 3: Implement dynamic Tool definitions**
+- [x] **Step 3: Implement dynamic Tool definitions**
 
 The input schema is profile-specific:
 
@@ -726,12 +726,12 @@ Snapshot a distinct `ToolDefinition` per profile. Preview never exposes task tex
 to the supervisor, serializes ASCII canonical JSON, checks UTF-8 byte length, and returns static
 errors. Re-raise cancellation.
 
-- [ ] **Step 4: Export the stable M6a API**
+- [x] **Step 4: Export the stable M6a API**
 
 Export profile/limits/status/results/evidence/errors, factory protocols, event models/sinks,
 supervisor, Tool, and builder. Do not export internal prepared-child or transcript walkers.
 
-- [ ] **Step 5: Verify Tool, Registry, and Policy paths**
+- [x] **Step 5: Verify Tool, Registry, and Policy paths**
 
 ```powershell
 py -m uv run pytest tests/unit/subagents/test_tools.py tests/unit/tools/test_registry.py tests/unit/policy -q
@@ -739,7 +739,7 @@ py -m uv run ruff check src/mini_code_agent/subagents tests/unit/subagents
 py -m uv run pyright src/mini_code_agent/subagents tests/unit/subagents
 ```
 
-- [ ] **Step 6: Commit the parent adapter**
+- [x] **Step 6: Commit the parent adapter**
 
 ```powershell
 git add src/mini_code_agent/subagents tests/unit/subagents/test_tools.py
@@ -751,7 +751,7 @@ git commit -m "feat: expose governed analysis subagents"
 **Files:**
 - Create: `tests/integration/test_governed_subagent_agent.py`
 
-- [ ] **Step 1: Build real governed child Tools**
+- [x] **Step 1: Build real governed child Tools**
 
 Create a test `SubagentToolFactory` that returns a new `GovernedToolExecutor` per child:
 
@@ -774,7 +774,7 @@ def create(
 
 Assert exact profile names equal the produced definitions.
 
-- [ ] **Step 2: Write the parent Agent integration**
+- [x] **Step 2: Write the parent Agent integration**
 
 Use a parent `ScriptedProvider` that calls `delegate_analysis` with two tasks, then stops. Use a
 factory that returns two child scripted Providers; each child calls a real read-only Tool and then
@@ -790,7 +790,7 @@ Assert:
 - child Tool trust source is `SUBAGENT`;
 - parent and child Workspaces remain byte-identical.
 
-- [ ] **Step 3: Add deny, timeout, and non-recursion integration cases**
+- [x] **Step 3: Add deny, timeout, and non-recursion integration cases**
 
 Prove:
 
@@ -799,7 +799,7 @@ Prove:
 - one timed-out child does not stop its sibling;
 - parent task cancellation cancels both children.
 
-- [ ] **Step 4: Run integration and leak assertions**
+- [x] **Step 4: Run integration and leak assertions**
 
 ```powershell
 py -m uv run pytest tests/integration/test_governed_subagent_agent.py -q
@@ -809,7 +809,7 @@ rg -n "task text|system_prompt|arguments|ToolResult content|exception" src/mini_
 
 Expected: all tests pass; the event scan shows no payload fields.
 
-- [ ] **Step 5: Commit integration evidence**
+- [x] **Step 5: Commit integration evidence**
 
 ```powershell
 git add tests/integration/test_governed_subagent_agent.py
@@ -821,7 +821,7 @@ git commit -m "test: prove governed subagent delegation"
 **Files:**
 - Modify only files implicated by a failing regression test.
 
-- [ ] **Step 1: Run full branch coverage**
+- [x] **Step 1: Run full branch coverage**
 
 Run on Python 3.12 and 3.13:
 
@@ -834,7 +834,7 @@ py -m uv run --no-sync pytest --cov -q
 
 Record exact pass/skip counts and branch coverage.
 
-- [ ] **Step 2: Run static, security, and dependency gates**
+- [x] **Step 2: Run static, security, and dependency gates**
 
 ```powershell
 py -m uv run --no-sync ruff format --check .
@@ -845,7 +845,7 @@ py -m uv export --locked --no-dev --no-emit-project --format requirements.txt -o
 py -m uv tool run --python 3.13 pip-audit -r build/runtime-requirements.txt
 ```
 
-- [ ] **Step 3: Inspect trust and concurrency boundaries**
+- [x] **Step 3: Inspect trust and concurrency boundaries**
 
 ```powershell
 git diff main...HEAD -- src/mini_code_agent/subagents src/mini_code_agent/policy/models.py
@@ -862,7 +862,7 @@ Confirm:
 - no raw task, prompt, argument, result, or exception enters events/evidence;
 - no recursive local Tool is admitted.
 
-- [ ] **Step 4: Fix every issue with red-green regression**
+- [x] **Step 4: Fix every issue with red-green regression**
 
 For each issue, add the smallest failing test, run it to observe red, apply the focused fix, rerun
 the focused and full Subagent suites, and commit:
@@ -889,13 +889,13 @@ If no issue is found, do not create an empty commit.
 - Modify: `uv.lock`
 - Modify: release-version tests and `tests/smoke_test.py`
 
-- [ ] **Step 1: Write architecture, ADR, and threat model**
+- [x] **Step 1: Write architecture, ADR, and threat model**
 
 Document fresh child context, exact host profile, no recursion, SUBAGENT provenance, TaskGroup
 lifetime, per-child/outer timeout, cancellation, evidence hashes, event omissions, and why
 in-process children are not an OS sandbox.
 
-- [ ] **Step 2: Add L11 prerequisites and exercises**
+- [x] **Step 2: Add L11 prerequisites and exercises**
 
 Teach:
 
@@ -909,12 +909,12 @@ Teach:
 
 Add at least eight code-reading exercises tied to exact M6a modules.
 
-- [ ] **Step 3: Update resume material**
+- [x] **Step 3: Update resume material**
 
 For the Subagent highlight, include why it is needed, exact technology, function, optimization,
 problem solved, measurable evidence, and non-claims. Do not claim token savings without a benchmark.
 
-- [ ] **Step 4: Bump and validate release contract**
+- [x] **Step 4: Bump and validate release contract**
 
 Set package version to `0.15.0a0`, lock it, update all exact version tests, and import stable
 Subagent API from installed-package smoke.
@@ -930,7 +930,7 @@ py -m uv run pyright
 git diff --check
 ```
 
-- [ ] **Step 5: Commit documentation and release preparation**
+- [x] **Step 5: Commit documentation and release preparation**
 
 ```powershell
 git add docs README.md SECURITY.md CHANGELOG.md pyproject.toml uv.lock tests

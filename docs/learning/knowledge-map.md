@@ -816,28 +816,145 @@
 
 ### L11：Subagent 与 Worktree
 
-**理论**
+M6 分成两个独立权限阶段：
 
-- Subagent 是有预算的子任务执行者，不允许无限递归。
-- 隔离维度包括上下文、文件、Git 和权限。
-- 返回结果必须携带证据，不只给自然语言结论。
+- **M6a 已实现**：同进程、fresh context、不可递归、只读分析 Subagent；
+- **M6b 待实现**：宿主创建 Git Worktree、写入候选快照、单独审批 adoption。
 
-**Python**
+不要因为两者都叫 Subagent 就把“并行读”和“并行改”当成同一个安全问题。
 
-- 并发任务、取消传播、结构化聚合、进程生命周期。
+**前置知识**
 
-**工程**
+- `async def` 返回 coroutine object；只有被 `await` 或包装成 Task 后才执行。
+- coroutine 是计算描述，Task 是事件循环调度和取消的生命周期对象。
+- `asyncio.TaskGroup` 是结构化并发作用域：退出前必须等待所有子 Task 完成或取消，不允许
+  把子任务遗留到父调用之后。
+- `asyncio.Semaphore` 限制同时运行的子任务，不负责结果顺序；结果顺序由 ordinal slot
+  单独保证。
+- `asyncio.timeout` 的 deadline cancellation 与外部 `Task.cancel()` 都表现为取消，但外层
+  timeout context 只把自己的取消转换成 `TimeoutError`。外部 `CancelledError` 必须继续上抛。
+- Pydantic frozen profile 是宿主能力配置，不是模型建议；`Protocol` 工厂负责创建真实
+  Provider 与 Tool executor。
+- Capability profile 与 RBAC/service account 相似：都在执行前固定“可以做什么”；区别是
+  本项目 profile 同时固定 Tool Schema、顺序、Agent 预算、结果预算和 provenance。
+- SHA-256 只能证明两段已观察字节是否一致，不能证明自然语言结论正确，也不是签名、加密或
+  数据来源证明。
 
-- 限制深度、数量、token、时间和工具权限。
-- 使用 Worktree 隔离可能冲突的修改。
-- 父 Agent 对合并和最终输出负责。
+**核心概念**
+
+1. **Fresh context，不是 context fork**
+
+   每个 child 只接收宿主 `system_prompt` 和一个 `Message.user_text(task)`。它不会复制 parent
+   transcript、parent system prompt、sibling task 或 sibling ToolResult。这样能把子结果归因到
+   一个任务，并降低无关上下文传播。
+
+2. **Host profile，不是模型动态角色**
+
+   `SubagentProfile` 固定 parent local Tool name、child system prompt、exact Tool names、
+   `AgentLimits`、并发、timeout、summary/evidence/result 上限。模型只能提交 task/reason，
+   不能选择 Provider、Tool、权限、深度或 timeout。
+
+3. **能力组合先于 Provider I/O**
+
+   `SubagentSupervisor._prepare_children()` 先生成全部唯一 child ID，再创建每个独立 Provider
+   和 Tool executor。`validate_child_tools()` 要求 exact ordered names、全部 `READ_ONLY`、
+   `governance_enforced is True`，并且每个 Tool 的来源都是 `TrustSource.SUBAGENT`。任一失败使
+   整批在模型调用前关闭。
+
+4. **Fan-out/Fan-in 与有序聚合**
+
+   一个 `TaskGroup` 创建全部 child Task，Semaphore 控制 active concurrency。child 可以乱序
+   完成，但写入固定 ordinal result slot，最终 batch 与输入顺序一致。这类似 Flink keyed
+   async I/O 中“并发完成 + 按业务序号恢复顺序”，不是按 completion order 直接 append。
+
+5. **两层 deadline**
+
+   child timeout 只把一个 child 标成 `TIMED_OUT`，sibling 继续；outer batch timeout 取消
+   所有未完成 Task，并把空 ordinal 补成 `BATCH_TIMED_OUT`。普通 child projection failure
+   同样转成 typed result，不触发 fail-fast cancellation。
+
+6. **取消是控制信号**
+
+   `CancelledError` 不是普通业务错误。Supervisor 和 parent Tool 都显式 re-raise，让
+   TaskGroup 取消并 join 所有 child。若把它吞进 `except Exception` 或转成“执行失败”，父任务
+   会误以为取消成功处理，而后台工作可能继续。
+
+7. **Evidence，不是 child 自述**
+
+   `untrusted_summary` 是模型文本，只做字符上限和 NUL 拒绝。真正可核对的是每个 ToolCall 的
+   ID、Tool name、error flag、result character count 和 ToolResult UTF-8 SHA-256。原始参数、
+   文件内容和 ToolResult 不复制到 parent evidence/event。
+
+8. **后台 ASK 必须 fail closed**
+
+   child executor 固定 `SessionMode.NON_INTERACTIVE`。若 Policy 返回 `ASK`，不会由多个后台
+   child 同时弹审批，也不会继承 parent approval，而是直接拒绝。这与 Java 后台 job 不应
+   偷用前台用户会话授权相同。
+
+9. **Context isolation 不是 OS sandbox**
+
+   child 仍与 parent 共享 Python 进程、内存、OS 用户、Provider 凭证和宿主 Tool 实现。
+   exact read-only Tool profile 约束的是受治理调用路径，不能限制恶意宿主 Python 对象。
+
+10. **M6b 为什么必须另做 Worktree**
+
+    写入会增加 repository identity、dirty base、并发冲突、candidate persistence、adoption
+    approval、cleanup 和 rollback uncertainty。M6a 不能把“只读 child 已安全”外推成“同进程
+    child 可以直接改 parent checkout”。
+
+**Java / Flink / Spark 概念映射**
+
+| 既有经验 | M6a 对应概念 | 关键差异 |
+|---|---|---|
+| Java `Thread` | `asyncio.Task` | Task 是协作式调度；阻塞代码会卡住同一 event loop |
+| `ExecutorService.submit` | `TaskGroup.create_task` | TaskGroup 有词法生命周期，退出前取消/join 全部 child |
+| Java 21 `StructuredTaskScope` | `asyncio.TaskGroup` | 都强调 parent-child lifetime；本项目把普通失败投影为 typed result |
+| `CompletableFuture.allOf` | fan-out/fan-in | `allOf` 不自动提供本项目的 ordinal aggregation、timeout 分类和结果模型 |
+| `Semaphore` / 线程池大小 | `asyncio.Semaphore` | 只限制 active child，不决定输出顺序 |
+| Spring Security role/service account | `SubagentProfile` + `TrustSource.SUBAGENT` | profile 还钉住 Tool contract 和资源预算 |
+| Flink operator subtask | 独立 child `AgentRuntime` | child 不是分布式进程，没有 checkpoint/restart 隔离 |
+| Flink async I/O ordered wait | ordinal result slots | child completion 可乱序，parent batch 仍按输入顺序 |
+| Flink cancellation | `CancelledError` propagation | Python 库必须显式不吞取消；线程/外部系统未必协作停止 |
+| Spark task result accumulator | `SubagentBatchResult` | summary 不可信，证据只保留有界 metadata/hash |
+| 数据血缘 fingerprint | ToolResult SHA-256 | hash 是内容身份，不是业务正确性或来源签名 |
+
+**代码阅读顺序**
+
+1. `subagents/models.py`：Profile、Limits、Status、Result 及跨字段约束。
+2. `policy/models.py`：`TrustSource.SUBAGENT` 如何与 MODEL/EXTENSION 区分。
+3. `subagents/contracts.py`：Provider/Tool factory 与 exact read-only capability 校验。
+4. `subagents/evidence.py`：transcript correlation 和 raw-content omission。
+5. `subagents/events.py`：为什么 event union 与 AgentEvent 分开，以及字段刻意缺少什么。
+6. `subagents/supervisor.py`：preflight、TaskGroup、Semaphore、两层 timeout、取消和 ordinal slot。
+7. `subagents/tools.py`：parent JSON Schema、Preview、Policy 接口、canonical result bytes。
+8. `tests/integration/test_governed_subagent_agent.py`：真实 parent/child Agent 与 Read/Search 闭环。
 
 **验收练习**
 
-- 两个只读 Subagent 并行分析独立问题。
-- 子任务超时不阻塞父 Agent。
-- Worktree 不污染主工作区。
-- 冲突时停止并提供 diff，不强行合并。
+1. 从 `SubagentProfile.validate_capabilities()` 开始，列出 child 无法递归 delegation 的两层
+   约束，并解释为什么 builder 还要做跨 profile local-name 冲突检查。
+2. 阅读 `_prepare_children()`，画出 duplicate child ID、Provider factory exception、
+   reordered Tool definitions 三种失败分别发生在首个 Provider request 的前还是后。
+3. 对比 `AgentRuntime.run()` 与 `_run_child()`，证明 child first request 只有一个 task
+   message；写一个测试确保 parent transcript 中的 secret 不出现在 child request。
+4. 用两个 gate Provider 让 ordinal 1 先完成，解释 `result_slots` 为什么仍返回
+   `[ordinal 0, ordinal 1]`，并对比按 completion append 的错误实现。
+5. 把 `max_concurrency` 从 2 改成 1，记录 peak active child；说明 Semaphore 为什么不能替代
+   TaskGroup 的取消/join 责任。
+6. 制造 child timeout、projection failure、batch timeout 和 parent cancellation，分别记录
+   typed result 或抛出异常；解释外部 cancellation 为什么不能转成 `BATCH_TIMED_OUT`。
+7. 给 child Tool 返回包含 secret 的内容，检查 parent evidence/event 只出现 char count/hash；
+   再说明 parent Agent Checkpoint 是否可能仍保存完整 ToolResult。
+8. 给 child Policy 添加一条 `ASK` 规则，证明 `NON_INTERACTIVE` 下 approval handler 调用次数为
+   0；说明为什么不能复用 parent 的一次 approval。
+9. 尝试把 `write_file`、`run_command` 或 MCP alias 放进 analysis profile，定位哪一个
+   composition invariant 拒绝它，不要只依赖 Tool 名称。
+10. 阅读 `SubagentAnalysisTool._serialize_batch()`，构造 Unicode summary 使 ASCII JSON 膨胀，
+    证明上限按最终 UTF-8 bytes 而不是原始 Python 字符数执行。
+11. 检查 `SubagentCompleted` 的字段集合，列出 task、prompt、summary、arguments、ToolResult 和
+    exception 为什么都不应进入 observability event。
+12. 为 M6b 写一页威胁清单：clean base、no-checkout Worktree、allowed path、candidate
+    snapshot、adoption approval、conflict 和 cleanup uncertainty；不要修改 M6a profile。
 
 ### L12：CI、Benchmark 与发布
 
