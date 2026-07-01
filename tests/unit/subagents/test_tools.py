@@ -345,9 +345,7 @@ def test_builder_returns_one_distinct_tool_per_profile() -> None:
         profile_for(profile_id="two", local_name="analysis_b"),
     )
 
-    tools = build_subagent_tools(
-        tuple(FakeSupervisor(profile) for profile in profiles)
-    )
+    tools = build_subagent_tools(tuple(FakeSupervisor(profile) for profile in profiles))
 
     assert [tool.definition.name for tool in tools] == ["analysis_a", "analysis_b"]
     assert tools[0].definition is not tools[1].definition

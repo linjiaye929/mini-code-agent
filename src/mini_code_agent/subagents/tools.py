@@ -160,12 +160,8 @@ class SubagentAnalysisTool:
         except ValidationError:
             raise ValueError(_INVALID_ARGUMENTS_MESSAGE) from None
         limits = self._profile.limits
-        if (
-            len(arguments.tasks) > limits.max_tasks
-            or any(
-                len(task) > limits.max_task_chars
-                for task in arguments.tasks
-            )
+        if len(arguments.tasks) > limits.max_tasks or any(
+            len(task) > limits.max_task_chars for task in arguments.tasks
         ):
             raise ValueError(_INVALID_ARGUMENTS_MESSAGE)
         return arguments
@@ -178,11 +174,7 @@ def build_subagent_tools(
     profiles = tuple(supervisor.profile for supervisor in ordered)
     profile_ids = tuple(profile.profile_id for profile in profiles)
     local_names = tuple(profile.local_name for profile in profiles)
-    child_tool_names = {
-        tool_name
-        for profile in profiles
-        for tool_name in profile.tool_names
-    }
+    child_tool_names = {tool_name for profile in profiles for tool_name in profile.tool_names}
     if (
         len(set(profile_ids)) != len(profile_ids)
         or len(set(local_names)) != len(local_names)
@@ -233,13 +225,8 @@ def _validated_batch(
 ) -> SubagentBatchResult:
     if not isinstance(candidate, SubagentBatchResult):
         raise ValueError("Invalid Subagent batch result.")
-    batch = SubagentBatchResult.model_validate(
-        candidate.model_dump(mode="json")
-    )
-    if (
-        batch.profile_id != profile.profile_id
-        or len(batch.children) != expected_children
-    ):
+    batch = SubagentBatchResult.model_validate(candidate.model_dump(mode="json"))
+    if batch.profile_id != profile.profile_id or len(batch.children) != expected_children:
         raise ValueError("Invalid Subagent batch result.")
     return batch
 

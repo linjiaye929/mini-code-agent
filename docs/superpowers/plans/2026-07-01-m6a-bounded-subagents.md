@@ -821,7 +821,7 @@ git commit -m "test: prove governed subagent delegation"
 **Files:**
 - Modify only files implicated by a failing regression test.
 
-- [ ] **Step 1: Run full branch coverage**
+- [x] **Step 1: Run full branch coverage**
 
 Run on Python 3.12 and 3.13:
 
@@ -834,7 +834,7 @@ py -m uv run --no-sync pytest --cov -q
 
 Record exact pass/skip counts and branch coverage.
 
-- [ ] **Step 2: Run static, security, and dependency gates**
+- [x] **Step 2: Run static, security, and dependency gates**
 
 ```powershell
 py -m uv run --no-sync ruff format --check .
@@ -845,7 +845,7 @@ py -m uv export --locked --no-dev --no-emit-project --format requirements.txt -o
 py -m uv tool run --python 3.13 pip-audit -r build/runtime-requirements.txt
 ```
 
-- [ ] **Step 3: Inspect trust and concurrency boundaries**
+- [x] **Step 3: Inspect trust and concurrency boundaries**
 
 ```powershell
 git diff main...HEAD -- src/mini_code_agent/subagents src/mini_code_agent/policy/models.py
@@ -862,7 +862,7 @@ Confirm:
 - no raw task, prompt, argument, result, or exception enters events/evidence;
 - no recursive local Tool is admitted.
 
-- [ ] **Step 4: Fix every issue with red-green regression**
+- [x] **Step 4: Fix every issue with red-green regression**
 
 For each issue, add the smallest failing test, run it to observe red, apply the focused fix, rerun
 the focused and full Subagent suites, and commit:

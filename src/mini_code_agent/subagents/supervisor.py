@@ -166,10 +166,12 @@ class SubagentSupervisor:
         provider_ids: set[int] = set()
         tool_ids: set[int] = set()
         try:
-            for ordinal, task in enumerate(tasks):
-                child_id = self._id_factory()
-                if _CHILD_ID.fullmatch(child_id) is None:
-                    raise SubagentCompositionError
+            child_ids = tuple(self._id_factory() for _ in tasks)
+            if len(set(child_ids)) != len(child_ids) or any(
+                _CHILD_ID.fullmatch(child_id) is None for child_id in child_ids
+            ):
+                raise SubagentCompositionError
+            for ordinal, (task, child_id) in enumerate(zip(tasks, child_ids, strict=True)):
                 provider = self._provider_factory.create(self._profile, child_id)
                 tools = self._tool_factory.create(self._profile, self._workspace_root)
                 if id(provider) in provider_ids or id(tools) in tool_ids:
@@ -377,11 +379,7 @@ def _validate_provider(provider: object) -> None:
 
 
 def _valid_parent_tool_call_id(value: object) -> bool:
-    return (
-        isinstance(value, str)
-        and 1 <= len(value) <= 128
-        and "\0" not in value
-    )
+    return isinstance(value, str) and 1 <= len(value) <= 128 and "\0" not in value
 
 
 def _valid_tasks(
@@ -393,15 +391,13 @@ def _valid_tasks(
     if not isinstance(value, tuple):
         return False
     tasks = cast(tuple[object, ...], value)
-    return (
-        1 <= len(tasks) <= max_tasks
-        and all(
-            isinstance(task, str)
-            and 1 <= len(task) <= max_task_chars
-            and "\0" not in task
-            for task in tasks
-        )
-    )
+    if not 1 <= len(tasks) <= max_tasks or not all(
+        isinstance(task, str) and 1 <= len(task) <= max_task_chars and "\0" not in task
+        for task in tasks
+    ):
+        return False
+    string_tasks = cast(tuple[str, ...], tasks)
+    return len(set(string_tasks)) == len(string_tasks)
 
 
 def _runtime_id(child_id: str) -> str:

@@ -282,9 +282,7 @@ async def test_real_parent_and_children_run_governed_read_only_path(
     assert children[0].requests[0].messages == (Message.user_text(tasks[0]),)
     assert children[1].requests[0].messages == (Message.user_text(tasks[1]),)
     child_run_ids = {
-        request.request_id.rsplit(":", 1)[0]
-        for child in children
-        for request in child.requests[:1]
+        request.request_id.rsplit(":", 1)[0] for child in children for request in child.requests[:1]
     }
     assert len(child_run_ids) == 2
     assert all(run_id.startswith("subagent-") for run_id in child_run_ids)
@@ -297,10 +295,7 @@ async def test_real_parent_and_children_run_governed_read_only_path(
         "Read review complete.",
         "Search review complete.",
     ]
-    evidence = [
-        cast(list[dict[str, object]], child["evidence"])[0]
-        for child in projected_children
-    ]
+    evidence = [cast(list[dict[str, object]], child["evidence"])[0] for child in projected_children]
     assert [item["tool_name"] for item in evidence] == [
         "read_file",
         "search_text",

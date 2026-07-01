@@ -60,12 +60,7 @@ class SubagentBatchCompleted(SubagentEventBase):
     result_sha256: str = Field(pattern=_SHA256)
 
 
-SubagentEvent = (
-    SubagentBatchStarted
-    | SubagentStarted
-    | SubagentCompleted
-    | SubagentBatchCompleted
-)
+SubagentEvent = SubagentBatchStarted | SubagentStarted | SubagentCompleted | SubagentBatchCompleted
 
 
 class SubagentEventSink(Protocol):

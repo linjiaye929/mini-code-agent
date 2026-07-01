@@ -34,6 +34,8 @@ from mini_code_agent.subagents.events import (
 )
 from mini_code_agent.subagents.models import (
     SubagentBatchResult,
+    SubagentError,
+    SubagentErrorCode,
     SubagentLimits,
     SubagentProfile,
     SubagentStatus,
@@ -228,9 +230,7 @@ def supervisor_for(
     monotonic: Callable[[], float] | None = None,
 ) -> tuple[SubagentSupervisor, ProviderFactory, ToolFactory]:
     provider_factory = ProviderFactory(providers)
-    tool_factory = ToolFactory(
-        tools or tuple(governed_tools() for _ in providers)
-    )
+    tool_factory = ToolFactory(tools or tuple(governed_tools() for _ in providers))
     ids = iter(child_ids)
     supervisor = SubagentSupervisor(
         profile or profile_for(),
@@ -262,9 +262,7 @@ async def test_one_child_gets_fresh_context_exact_tools_and_bounded_result(
     )
 
     assert provider.requests[0].system_prompt == supervisor.profile.system_prompt
-    assert provider.requests[0].messages == (
-        Message.user_text("Inspect parser bounds."),
-    )
+    assert provider.requests[0].messages == (Message.user_text("Inspect parser bounds."),)
     assert tuple(item.name for item in provider.requests[0].tools) == (
         "read_file",
         "search_text",
@@ -357,6 +355,51 @@ async def test_all_children_are_composed_before_any_provider_call(
         )
 
     assert shared.requests == []
+
+
+@pytest.mark.asyncio
+async def test_duplicate_child_ids_fail_composition_before_provider_call(
+    tmp_path: Path,
+) -> None:
+    providers = (
+        ScriptedProvider((final_response("first"),)),
+        ScriptedProvider((final_response("second"),)),
+    )
+    supervisor, _, _ = supervisor_for(
+        tmp_path,
+        providers=providers,
+        child_ids=("same-child", "same-child"),
+    )
+
+    with pytest.raises(SubagentCompositionError):
+        await supervisor.run_batch(
+            parent_tool_call_id="parent-1",
+            tasks=("one", "two"),
+        )
+
+    assert all(provider.requests == [] for provider in providers)
+
+
+@pytest.mark.asyncio
+async def test_duplicate_tasks_are_rejected_before_child_composition(
+    tmp_path: Path,
+) -> None:
+    provider = ScriptedProvider((final_response(),))
+    supervisor, provider_factory, tool_factory = supervisor_for(
+        tmp_path,
+        providers=(provider,),
+    )
+
+    with pytest.raises(SubagentError) as caught:
+        await supervisor.run_batch(
+            parent_tool_call_id="parent-1",
+            tasks=("same task", "same task"),
+        )
+
+    assert caught.value.code is SubagentErrorCode.INVALID_BATCH
+    assert provider_factory.calls == []
+    assert tool_factory.calls == []
+    assert provider.requests == []
 
 
 @pytest.mark.asyncio
@@ -539,10 +582,7 @@ async def test_batch_timeout_marks_every_unfinished_ordinal(
     )
 
     assert [child.ordinal for child in result.children] == [0, 1, 2]
-    assert all(
-        child.status is SubagentStatus.BATCH_TIMED_OUT
-        for child in result.children
-    )
+    assert all(child.status is SubagentStatus.BATCH_TIMED_OUT for child in result.children)
     assert result.timed_out == 3
     assert gate.cancelled == 2
     assert gate.active == 0
