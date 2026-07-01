@@ -193,7 +193,7 @@ git commit -m "feat: define governed MCP contracts"
 - Create: `src/mini_code_agent/mcp/contracts.py`
 - Create: `tests/unit/mcp/test_contracts.py`
 
-- [ ] **Step 1: Write failing canonicalization tests**
+- [x] **Step 1: Write failing canonicalization tests**
 
 Prove key-order-independent hashes and reject booleans as schemas, invalid JSON Schema, oversized
 schemas, NaN/Infinity, excessive depth/nodes/strings, and non-object input schemas:
@@ -211,7 +211,7 @@ def test_schema_sha256_rejects_non_finite_numbers() -> None:
     assert caught.value.code is McpConnectionErrorCode.TOOL_SCHEMA_INVALID
 ```
 
-- [ ] **Step 2: Write failing exact-listing tests**
+- [x] **Step 2: Write failing exact-listing tests**
 
 Cover identity/protocol/capability checks, `listChanged`, pagination, duplicate/unexpected/missing
 tools, input/output hash drift, and construction from host metadata:
@@ -235,13 +235,13 @@ def test_verified_definition_uses_host_authority() -> None:
     assert verified[0].risk is RiskLevel.LOW
 ```
 
-- [ ] **Step 3: Run tests and verify failure**
+- [x] **Step 3: Run tests and verify failure**
 
 Run: `uv run pytest tests/unit/mcp/test_contracts.py -q`
 
 Expected: FAIL because contract functions are absent.
 
-- [ ] **Step 4: Implement canonical bounded JSON and exact verification**
+- [x] **Step 4: Implement canonical bounded JSON and exact verification**
 
 Expose:
 
@@ -268,7 +268,7 @@ def verify_tool_contracts(
 Use `Draft202012Validator.check_schema`, deterministic compact JSON, exact observed/granted set
 equality, and sorted local output. Reject `next_cursor` and dynamic tool-list capability.
 
-- [ ] **Step 5: Run contract tests**
+- [x] **Step 5: Run contract tests**
 
 Run:
 
@@ -279,7 +279,7 @@ uv run pyright src/mini_code_agent/mcp/contracts.py tests/unit/mcp/test_contract
 
 Expected: both pass.
 
-- [ ] **Step 6: Commit verification**
+- [x] **Step 6: Commit verification**
 
 ```powershell
 git add src/mini_code_agent/mcp/contracts.py tests/unit/mcp/test_contracts.py
