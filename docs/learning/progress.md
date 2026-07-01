@@ -13,8 +13,8 @@
 | L8 Git/test/repair | Complete and released | M4a Git + M4b Pytest + M4c bounded Repair |
 | L9 Skills and Hooks | Complete and released | Inert Skills + monotonic Tool Hooks; v0.13 evidence |
 | L10 MCP | Complete and released | Governed stdio, exact grants, real SDK integration; v0.14 evidence |
-| L11 Subagent and Worktree | M6a complete locally; M6b not started | Host-profiled read-only Subagents, TaskGroup, real parent/child integration |
-| L12 CI, benchmark and release | In progress | v0.14 released; v0.15 local quality/security gates complete |
+| L11 Subagent and Worktree | M6a complete and released; M6b not started | Host-profiled read-only Subagents, TaskGroup, real parent/child integration |
+| L12 CI, benchmark and release | In progress | v0.15 prerelease and cross-platform evidence complete |
 
 ## L0 Notes
 
@@ -765,7 +765,7 @@
 - Worktree 能隔离 checkout 路径冲突，但不是 OS sandbox，也不自动解决 candidate adoption、
   conflict、cleanup、rollback 或 concurrent host mutation；这些必须留给 M6b 单独设计。
 
-## M6a Local Verification
+## M6a Release Verification
 
 - 完整 parent/child 集成使用真实 `AgentRuntime`、`GovernedToolExecutor`、
   `ReadFileTool`/`SearchTextTool` 和 `WorkspaceBoundary`，仅 Provider 采用确定性脚本。
@@ -777,11 +777,22 @@
   count 回到 0。
 - 安全审查增加 duplicate child ID 与 duplicate direct task 红灯回归，修复后完整
   Subagent + integration suite 为 100 passed。
-- Python 3.12.13 在最终两条 hardening 测试加入前为 1060 passed、10 skipped、91.08%
-  branch coverage；最终 Python 3.13.14 为 1062 passed、10 skipped、91.09%。skip 均来自
-  当前 Windows 会话缺少 symlink privilege。
+- 最终本地 Python 3.12.13 与 3.13.14 均为 1062 passed、10 skipped、91.09% branch
+  coverage；skip 均来自当前 Windows 会话缺少 symlink privilege。
 - Ruff format/check、strict Pyright、Bandit 与 locked runtime pip-audit 已通过；
   pip-audit 为 `No known vulnerabilities found`。
-- `0.15.0a0` version contract 和 installed-package Subagent API smoke 已通过。最终双版本
-  release rerun、reproducible artifact、GitHub PR/CI/tag/Release 证据留给 Task 9，当前不
-  宣称已发布。
+- 固定 `SOURCE_DATE_EPOCH=1580601600` 的两次构建逐字节一致。wheel
+  `mini_code_agent-0.15.0a0-py3-none-any.whl` 为 171435 bytes，SHA-256
+  `397a2b1c0348ea801552f641048e9bbd2b60d67015889755037f56729ccf136a`；sdist
+  `mini_code_agent-0.15.0a0.tar.gz` 为 522850 bytes，SHA-256
+  `b8fc9f59276afcf1481dc2c4272565528e76c3692e8b18b2f04b761361360762`。
+- 两个 artifact 在 Python 3.12/3.13 四组 isolated environment 中均通过 stable API/CLI
+  smoke，以及 real successful delegation 和 parent cancellation integration。
+- PR #5 <https://github.com/linjiayebat/mini-code-agent/pull/5> 的 CI run
+  `28537460691` 和 merged-main run `28537586242` 均通过 quality、Ubuntu/Windows x
+  Python 3.12/3.13 五个 job。main 的 Windows 两组各 1072 passed；Ubuntu 两组各
+  1071 passed、1 个 Windows-path-identity 条件跳过，coverage 为 91.15%-91.26%。
+- Annotated tag `v0.15.0-alpha.0` 解引用到 merge commit
+  `bba51dd17fb0d0ba8852c7be86c10add7e07e3ad`。非 draft GitHub prerelease
+  <https://github.com/linjiayebat/mini-code-agent/releases/tag/v0.15.0-alpha.0> 已发布，
+  远端 asset name、size 与 GitHub SHA-256 digest 均与上述本地制品一致。

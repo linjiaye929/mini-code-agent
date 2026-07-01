@@ -48,13 +48,22 @@ All notable changes follow Keep a Changelog. Versions follow Semantic Versioning
 
 ### Verification
 
-- Python 3.12.13 passed 1060 tests with 10 Windows symlink-privilege skips and 91.08% branch
-  coverage before the final two hardening regressions; the complete focused Subagent/integration
-  suite then passed 100 tests.
-- Final Python 3.13.14 passed 1062 tests with the same 10 platform skips and 91.09% branch
-  coverage. Ruff format/check, strict Pyright, Bandit, and locked runtime pip-audit passed.
-- Remote CI, reproducible artifact, installed wheel/sdist, tag, and GitHub prerelease evidence is
-  pending the release task and is not claimed here.
+- Local Python 3.12.13 and 3.13.14 each passed 1062 tests with 10 Windows
+  symlink-privilege skips and 91.09% branch coverage. Ruff format/check, strict Pyright, Bandit,
+  and locked runtime pip-audit passed.
+- PR #5 CI run `28537460691` and merged-main CI run `28537586242` passed quality plus
+  Ubuntu/Windows on Python 3.12/3.13. On merged main, Windows passed 1072 tests; Ubuntu passed
+  1071 with one intentional Windows-path-identity skip. Coverage ranged from 91.15% to 91.26%.
+- Repeated fixed-epoch builds produced byte-identical artifacts. The wheel is 171435 bytes with
+  SHA-256 `397a2b1c0348ea801552f641048e9bbd2b60d67015889755037f56729ccf136a`;
+  the sdist is 522850 bytes with SHA-256
+  `b8fc9f59276afcf1481dc2c4272565528e76c3692e8b18b2f04b761361360762`.
+- Both artifacts passed isolated stable-API/CLI smoke plus successful delegation and
+  parent-cancellation integration on Python 3.12/3.13.
+- Annotated tag `v0.15.0-alpha.0` dereferences to merge commit
+  `bba51dd17fb0d0ba8852c7be86c10add7e07e3ad`. The non-draft GitHub prerelease at
+  <https://github.com/linjiayebat/mini-code-agent/releases/tag/v0.15.0-alpha.0> reports asset
+  names, sizes, and SHA-256 digests identical to the locally verified artifacts.
 
 ## [0.14.0-alpha.0] - 2026-07-01
 

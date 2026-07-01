@@ -944,17 +944,17 @@ git commit -m "docs: prepare 0.15 subagent alpha"
 - Modify after verified release: `docs/learning/progress.md`
 - Modify after verified release: `docs/resume/project-profile.md`
 
-- [ ] **Step 1: Re-run final local gates**
+- [x] **Step 1: Re-run final local gates**
 
 Run Python 3.12/3.13 full coverage plus Ruff, strict Pyright, Bandit, and locked dependency audit.
 Record exact counts and platform skips.
 
-- [ ] **Step 2: Build byte-reproducible artifacts**
+- [x] **Step 2: Build byte-reproducible artifacts**
 
 Resolve and verify cleanup targets, set `SOURCE_DATE_EPOCH=1580601600`, build twice with hashed build
 constraints, run `tests/artifact_test.py`, and require identical SHA-256 for wheel and sdist.
 
-- [ ] **Step 3: Smoke wheel and sdist on Python 3.12/3.13**
+- [x] **Step 3: Smoke wheel and sdist on Python 3.12/3.13**
 
 In four isolated environments with no source-tree `PYTHONPATH`:
 
@@ -964,7 +964,7 @@ In four isolated environments with no source-tree `PYTHONPATH`:
 - execute the governed parent/child integration's successful delegation and cancellation-safe close
   paths.
 
-- [ ] **Step 4: Push and create PR**
+- [x] **Step 4: Push and create PR**
 
 ```powershell
 git push -u origin codex/m6a-bounded-subagents
@@ -974,7 +974,7 @@ gh pr checks --watch
 
 Require quality plus Ubuntu/Windows on Python 3.12/3.13.
 
-- [ ] **Step 5: Merge and publish**
+- [x] **Step 5: Merge and publish**
 
 After green PR checks:
 
@@ -987,7 +987,7 @@ git push origin v0.15.0-alpha.0
 gh release create v0.15.0-alpha.0 dist\mini_code_agent-0.15.0a0-py3-none-any.whl dist\mini_code_agent-0.15.0a0.tar.gz --prerelease --verify-tag --title "v0.15.0-alpha.0" --notes-file build/release-notes.md
 ```
 
-- [ ] **Step 6: Verify and record remote evidence**
+- [x] **Step 6: Verify and record remote evidence**
 
 Verify tag commit, non-draft prerelease, exact remote asset names/sizes/digests, merged-main CI, and
 clean tracking main. Record local/CI counts, run IDs, release URL, hashes, and skips; commit and push:
