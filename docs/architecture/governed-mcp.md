@@ -240,4 +240,3 @@ The lifecycle and Tool behavior align with the official
 [MCP Tools specification](https://modelcontextprotocol.io/specification/2025-11-25/server/tools),
 [security guidance](https://modelcontextprotocol.io/docs/tutorials/security/security_best_practices),
 and [Python SDK v1 client documentation](https://github.com/modelcontextprotocol/python-sdk/blob/v1.x/docs/client.md).
-

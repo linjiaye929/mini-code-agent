@@ -78,4 +78,3 @@ Negative:
 - **Remote HTTP in M5b:** requires an independent OAuth, SSRF, redirect, token, and endpoint
   identity design.
 - **SDK v2 pre-release:** inappropriate for the project's stable production dependency boundary.
-
