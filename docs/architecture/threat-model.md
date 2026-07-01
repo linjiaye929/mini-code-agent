@@ -14,6 +14,7 @@
 - Repository files and instructions.
 - Skills, hooks, and project configuration.
 - MCP servers and their tool results.
+- Child Agent output, summaries, and delegated task results.
 - Command output and generated patches.
 
 ## Initial Controls
@@ -83,6 +84,18 @@
   snapshots have independent limits.
 - Server instructions, descriptions, annotations, icons, metadata, stderr, `_meta`, image, audio,
   and resource content do not enter MCP model-facing Tool contracts or successful results.
+- M6a Subagents are created only from immutable host profiles. The complete batch validates unique
+  bounded tasks and child IDs before child Provider I/O; Providers and Tool executors must be
+  distinct objects.
+- Every M6a child receives a fresh one-message context and exact read-only definitions. Tool
+  executors must prove governance and `TrustSource.SUBAGENT`; recursive delegation is rejected.
+- One `asyncio.TaskGroup` owns all child tasks. Per-child and outer batch deadlines produce typed
+  ordered results, while external `CancelledError` cancels/joins children and is re-raised.
+- Background child `ASK` decisions fail closed in `NON_INTERACTIVE` mode. Parent Policy deny
+  prevents every child factory and Provider call.
+- Child summaries are explicitly untrusted and bounded. Evidence stores ToolCall identity,
+  error/count metadata, and ToolResult SHA-256 only; Subagent events exclude task, prompt,
+  message, summary, argument, ToolResult content, repository content, and exception text.
 
 ## Non-claims
 
@@ -146,3 +159,13 @@
   startup before any Tool Policy decision.
 - Stdio restricts protocol access to child pipes but not filesystem, network, process, or
   credential authority. Timeout/termination cannot prove a remote side effect did not complete.
+- In-process Subagents isolate Agent message context, not Python memory, operating-system identity,
+  credentials, Provider access, or malicious host-supplied code.
+- M6a read-only admission governs calls through the child executor; it is not an OS sandbox and
+  cannot prove a host Tool implementation is actually side-effect free.
+- Child result/evidence hashes are deterministic equality fingerprints, not signatures,
+  encryption, provenance, semantic correctness, or durable parent-child audit.
+- M6a child deadlines depend on cooperative asyncio cancellation and do not stop arbitrary threads
+  or prove that an external Provider request incurred no cost.
+- M6a does not implement write-capable children, Worktree isolation, candidate adoption, merging,
+  rollback, durable child Resume, recursive delegation, or token/cost/quality improvements.

@@ -889,13 +889,13 @@ If no issue is found, do not create an empty commit.
 - Modify: `uv.lock`
 - Modify: release-version tests and `tests/smoke_test.py`
 
-- [ ] **Step 1: Write architecture, ADR, and threat model**
+- [x] **Step 1: Write architecture, ADR, and threat model**
 
 Document fresh child context, exact host profile, no recursion, SUBAGENT provenance, TaskGroup
 lifetime, per-child/outer timeout, cancellation, evidence hashes, event omissions, and why
 in-process children are not an OS sandbox.
 
-- [ ] **Step 2: Add L11 prerequisites and exercises**
+- [x] **Step 2: Add L11 prerequisites and exercises**
 
 Teach:
 
@@ -909,12 +909,12 @@ Teach:
 
 Add at least eight code-reading exercises tied to exact M6a modules.
 
-- [ ] **Step 3: Update resume material**
+- [x] **Step 3: Update resume material**
 
 For the Subagent highlight, include why it is needed, exact technology, function, optimization,
 problem solved, measurable evidence, and non-claims. Do not claim token savings without a benchmark.
 
-- [ ] **Step 4: Bump and validate release contract**
+- [x] **Step 4: Bump and validate release contract**
 
 Set package version to `0.15.0a0`, lock it, update all exact version tests, and import stable
 Subagent API from installed-package smoke.
@@ -930,7 +930,7 @@ py -m uv run pyright
 git diff --check
 ```
 
-- [ ] **Step 5: Commit documentation and release preparation**
+- [x] **Step 5: Commit documentation and release preparation**
 
 ```powershell
 git add docs README.md SECURITY.md CHANGELOG.md pyproject.toml uv.lock tests

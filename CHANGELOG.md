@@ -4,6 +4,58 @@ All notable changes follow Keep a Changelog. Versions follow Semantic Versioning
 
 ## [Unreleased]
 
+## [0.15.0-alpha.0] - 2026-07-02
+
+### Added
+
+- Immutable host-owned `SubagentProfile` contracts with exact child Tools, independent Agent/
+  batch limits, no recursion, and `TrustSource.SUBAGENT`.
+- `SubagentSupervisor` with fresh child contexts, preflight composition, structured
+  `asyncio.TaskGroup` concurrency, per-child and outer deadlines, ordered aggregation, and
+  cancellation propagation.
+- Bounded child/batch result models, canonical SHA-256 projections, ToolResult evidence hashes,
+  static failures, and metadata-only lifecycle events.
+- One dynamic governed parent analysis Tool per profile, with profile-specific JSON Schema,
+  medium-risk preview, canonical ASCII result JSON, and UTF-8 byte budget.
+- Real parent/child Agent integration using governed `ReadFileTool`/`SearchTextTool`, including
+  Policy deny, non-recursion, sibling timeout isolation, event omission, byte-identical Workspace,
+  and parent cancellation.
+- M6a architecture, threat-model, ADR, learning, and resume documentation.
+
+### Changed
+
+- Added `TrustSource.SUBAGENT` so child Tool Policy is independently addressable from parent model
+  and extension calls.
+- The stable installed-package smoke imports the public Subagent profile, supervisor, Tool, and
+  builder API.
+- Subagent unit tests use a package namespace so Pytest's default import mode can collect the full
+  suite alongside existing same-named test modules.
+
+### Security
+
+- Every child ID, Provider, and governed Tool executor is validated before child Provider I/O;
+  malformed/duplicate IDs, reused objects, capability drift, non-read-only definitions, and
+  non-SUBAGENT provenance fail the complete batch.
+- Duplicate, empty, NUL-containing, oversized, or excessive tasks fail before child composition.
+- Child sessions are non-interactive, cannot receive a delegation Tool, and cannot convert `ASK`
+  into authority.
+- Child/batch timeout is isolated, external cancellation is re-raised, and no detached asyncio
+  task survives the parent ToolCall.
+- Events exclude task/prompt/message/summary/argument/result/exception content; evidence retains
+  only bounded metadata and SHA-256.
+- In-process children are not an OS sandbox. M6a does not claim Tool-implementation isolation,
+  durable parent-child audit, semantic proof from hashes, rollback, or exactly-once behavior.
+
+### Verification
+
+- Python 3.12.13 passed 1060 tests with 10 Windows symlink-privilege skips and 91.08% branch
+  coverage before the final two hardening regressions; the complete focused Subagent/integration
+  suite then passed 100 tests.
+- Final Python 3.13.14 passed 1062 tests with the same 10 platform skips and 91.09% branch
+  coverage. Ruff format/check, strict Pyright, Bandit, and locked runtime pip-audit passed.
+- Remote CI, reproducible artifact, installed wheel/sdist, tag, and GitHub prerelease evidence is
+  pending the release task and is not claimed here.
+
 ## [0.14.0-alpha.0] - 2026-07-01
 
 ### Added

@@ -11,9 +11,9 @@ after the repository is published. Until then, contact the repository owner priv
 
 ## Current Boundary
 
-Model output, repository content, project Skills, Tool arguments, test reports, and MCP servers
-are untrusted inputs. File, command, Git, test, Repair, and MCP Tool actions pass typed validation,
-Policy, and approval where applicable.
+Model output, repository content, project Skills, Tool arguments, test reports, MCP servers, child
+Agent output, and child summaries are untrusted inputs. File, command, Git, test, Repair, MCP, and
+Subagent Tool actions pass typed validation, Policy, and approval where applicable.
 
 M5a Skills are inert Markdown data. Discovery rejects links/reparse points, unsafe YAML, invalid
 metadata, conflicts, drift, and resource-limit violations. Parsing or hashing a Skill does not
@@ -43,6 +43,24 @@ sandbox. Schema hashes detect reviewed-contract drift, not executable provenance
 Timeout/cancellation cannot prove that a remote side effect did not complete. The project does not
 support remote HTTP/OAuth MCP, package installation, executable signatures, dynamic Tool lists,
 Resources, Prompts, Roots, Sampling, Elicitation, or Tasks.
+
+M6a analysis Subagents use immutable host profiles, fresh child contexts, exact read-only Tool
+sets, independent Agent/result budgets, and `TrustSource.SUBAGENT`. Every child Tool executor must
+prove governance and SUBAGENT provenance before any child Provider request. Child sessions are
+non-interactive, so `ASK` fails closed instead of opening nested approval. Parent Policy deny
+prevents child factories and Provider I/O.
+
+All child tasks belong to one `asyncio.TaskGroup`; child and batch deadlines are separate, and
+external cancellation is re-raised after children are cancelled and joined. Results expose only
+bounded untrusted summaries and ToolResult metadata/SHA-256 evidence. Subagent events exclude
+tasks, prompts, messages, summaries, Tool arguments/results, repository content, and exception
+text.
+
+M6a children are in-process and are not an OS, process, memory, credential, or network sandbox.
+Read-only Tool admission does not constrain malicious host-supplied Provider or Tool code.
+Evidence hashes are not signatures, semantic validation, confidentiality, or durable audit.
+M6a does not support child writes, command/network Tools, recursive delegation, Worktrees,
+candidate adoption, merge, rollback, or exactly-once execution.
 
 The project does not claim OS-level sandboxing unless an explicit sandbox backend is enabled and
 documented. It also does not claim that Hook timeout stops work delegated to another thread or
