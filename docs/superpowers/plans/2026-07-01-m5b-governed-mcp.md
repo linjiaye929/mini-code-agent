@@ -29,11 +29,11 @@ JSON Schema Draft 2020-12, asyncio/AnyIO stdio lifecycle, Pytest, Ruff, strict P
 - `src/mini_code_agent/mcp/client.py`: approval, lifecycle, timeout, cleanup, and serialized calls.
 - `src/mini_code_agent/mcp/tools.py`: `RegisteredTool` adapters and bounded result normalization.
 - `tests/unit/mcp/helpers.py`: deterministic grant/profile/session builders shared by MCP tests.
-- `tests/unit/mcp/test_models.py`: profile, secret, approval, bounds, and error tests.
-- `tests/unit/mcp/test_contracts.py`: schema hashing and listing verification tests.
-- `tests/unit/mcp/test_sdk.py`: SDK snapshot conversion and stdio parameter tests.
-- `tests/unit/mcp/test_client.py`: connection state, deadline, cleanup, and concurrency tests.
-- `tests/unit/mcp/test_tools.py`: preview, routing, result normalization, and error tests.
+- `tests/unit/mcp/test_mcp_models.py`: profile, secret, approval, bounds, and error tests.
+- `tests/unit/mcp/test_mcp_contracts.py`: schema hashing and listing verification tests.
+- `tests/unit/mcp/test_mcp_sdk.py`: SDK snapshot conversion and stdio parameter tests.
+- `tests/unit/mcp/test_mcp_client.py`: connection state, deadline, cleanup, and concurrency tests.
+- `tests/unit/mcp/test_mcp_tools.py`: preview, routing, result normalization, and error tests.
 - `tests/integration/fixtures/mcp_stdio_server.py`: official SDK deterministic test server.
 - `tests/integration/test_governed_mcp_agent.py`: real stdio plus Agent/Policy integration.
 - `docs/architecture/governed-mcp.md`: operational architecture and threat boundaries.
@@ -60,9 +60,9 @@ JSON Schema Draft 2020-12, asyncio/AnyIO stdio lifecycle, Pytest, Ruff, strict P
 - Modify: `uv.lock`
 - Create: `src/mini_code_agent/mcp/models.py`
 - Create: `tests/unit/mcp/helpers.py`
-- Create: `tests/unit/mcp/test_models.py`
+- Create: `tests/unit/mcp/test_mcp_models.py`
 
-- [ ] **Step 1: Add and lock the stable SDK**
+- [x] **Step 1: Add and lock the stable SDK**
 
 Add this runtime dependency without a CLI extra:
 
@@ -79,7 +79,7 @@ uv tree --depth 1
 
 Expected: resolution selects MCP `1.x`, never `2.x`.
 
-- [ ] **Step 2: Write failing model tests**
+- [x] **Step 2: Write failing model tests**
 
 Cover immutable grants, exact aliases, duplicate remote/local names, bounded argv, NUL rejection,
 absolute existing non-link cwd, secret masking, environment key validation, supported protocol,
@@ -94,7 +94,11 @@ def test_profile_masks_environment_values_and_projects_approval(tmp_path: Path) 
 
     assert "do-not-leak" not in repr(profile)
     request = profile.approval_request()
-    assert request.command == (sys.executable, "-m", "example_server")
+    assert request.command == (
+        str(Path(sys.executable).resolve()),
+        "-m",
+        "example_server",
+    )
     assert request.environment_keys == ("API_TOKEN",)
     assert "do-not-leak" not in request.model_dump_json()
 
@@ -106,13 +110,13 @@ def test_profile_rejects_duplicate_remote_and_local_tool_names(tmp_path: Path) -
         profile_for(tmp_path, grants=(first, duplicate))
 ```
 
-- [ ] **Step 3: Run tests and verify collection fails**
+- [x] **Step 3: Run tests and verify collection fails**
 
-Run: `uv run pytest tests/unit/mcp/test_models.py -q`
+Run: `uv run pytest tests/unit/mcp/test_mcp_models.py -q`
 
 Expected: FAIL because `mini_code_agent.mcp.models` does not exist.
 
-- [ ] **Step 4: Implement exact immutable models**
+- [x] **Step 4: Implement exact immutable models**
 
 Implement:
 
@@ -169,18 +173,18 @@ Add exact `McpServerProfile`, approval request, initialize/tool/page/call snapsh
 `McpConnectionErrorCode`, `McpConnectionError`, and `McpCallError`. Freeze environment mappings
 and grant tuples. `approval_request()` returns names, never secret values.
 
-- [ ] **Step 5: Run model and static tests**
+- [x] **Step 5: Run model and static tests**
 
 Run:
 
 ```powershell
-uv run pytest tests/unit/mcp/test_models.py -q
+uv run pytest tests/unit/mcp/test_mcp_models.py -q
 uv run pyright src/mini_code_agent/mcp/models.py tests/unit/mcp
 ```
 
 Expected: both pass.
 
-- [ ] **Step 6: Commit contracts**
+- [x] **Step 6: Commit contracts**
 
 ```powershell
 git add pyproject.toml uv.lock src/mini_code_agent/mcp/models.py tests/unit/mcp
@@ -191,9 +195,9 @@ git commit -m "feat: define governed MCP contracts"
 
 **Files:**
 - Create: `src/mini_code_agent/mcp/contracts.py`
-- Create: `tests/unit/mcp/test_contracts.py`
+- Create: `tests/unit/mcp/test_mcp_contracts.py`
 
-- [ ] **Step 1: Write failing canonicalization tests**
+- [x] **Step 1: Write failing canonicalization tests**
 
 Prove key-order-independent hashes and reject booleans as schemas, invalid JSON Schema, oversized
 schemas, NaN/Infinity, excessive depth/nodes/strings, and non-object input schemas:
@@ -211,7 +215,7 @@ def test_schema_sha256_rejects_non_finite_numbers() -> None:
     assert caught.value.code is McpConnectionErrorCode.TOOL_SCHEMA_INVALID
 ```
 
-- [ ] **Step 2: Write failing exact-listing tests**
+- [x] **Step 2: Write failing exact-listing tests**
 
 Cover identity/protocol/capability checks, `listChanged`, pagination, duplicate/unexpected/missing
 tools, input/output hash drift, and construction from host metadata:
@@ -235,13 +239,13 @@ def test_verified_definition_uses_host_authority() -> None:
     assert verified[0].risk is RiskLevel.LOW
 ```
 
-- [ ] **Step 3: Run tests and verify failure**
+- [x] **Step 3: Run tests and verify failure**
 
-Run: `uv run pytest tests/unit/mcp/test_contracts.py -q`
+Run: `uv run pytest tests/unit/mcp/test_mcp_contracts.py -q`
 
 Expected: FAIL because contract functions are absent.
 
-- [ ] **Step 4: Implement canonical bounded JSON and exact verification**
+- [x] **Step 4: Implement canonical bounded JSON and exact verification**
 
 Expose:
 
@@ -268,21 +272,21 @@ def verify_tool_contracts(
 Use `Draft202012Validator.check_schema`, deterministic compact JSON, exact observed/granted set
 equality, and sorted local output. Reject `next_cursor` and dynamic tool-list capability.
 
-- [ ] **Step 5: Run contract tests**
+- [x] **Step 5: Run contract tests**
 
 Run:
 
 ```powershell
-uv run pytest tests/unit/mcp/test_contracts.py -q
-uv run pyright src/mini_code_agent/mcp/contracts.py tests/unit/mcp/test_contracts.py
+uv run pytest tests/unit/mcp/test_mcp_contracts.py -q
+uv run pyright src/mini_code_agent/mcp/contracts.py tests/unit/mcp/test_mcp_contracts.py
 ```
 
 Expected: both pass.
 
-- [ ] **Step 6: Commit verification**
+- [x] **Step 6: Commit verification**
 
 ```powershell
-git add src/mini_code_agent/mcp/contracts.py tests/unit/mcp/test_contracts.py
+git add src/mini_code_agent/mcp/contracts.py tests/unit/mcp/test_mcp_contracts.py
 git commit -m "feat: pin MCP server tool contracts"
 ```
 
@@ -290,9 +294,9 @@ git commit -m "feat: pin MCP server tool contracts"
 
 **Files:**
 - Create: `src/mini_code_agent/mcp/sdk.py`
-- Create: `tests/unit/mcp/test_sdk.py`
+- Create: `tests/unit/mcp/test_mcp_sdk.py`
 
-- [ ] **Step 1: Write failing SDK conversion tests**
+- [x] **Step 1: Write failing SDK conversion tests**
 
 Use real `mcp.types` values without spawning a process. Verify initialize/list/call snapshots,
 unsupported content detection, `_meta` omission, no server instructions, environment unwrapping,
@@ -314,13 +318,13 @@ def test_stdio_parameters_unwrap_only_explicit_secrets(tmp_path: Path) -> None:
     assert params.env == {"TOKEN": "value"}
 ```
 
-- [ ] **Step 2: Run tests and verify failure**
+- [x] **Step 2: Run tests and verify failure**
 
-Run: `uv run pytest tests/unit/mcp/test_sdk.py -q`
+Run: `uv run pytest tests/unit/mcp/test_mcp_sdk.py -q`
 
 Expected: FAIL because the SDK adapter is absent.
 
-- [ ] **Step 3: Implement protocols and official adapter**
+- [x] **Step 3: Implement protocols and official adapter**
 
 Define:
 
@@ -345,21 +349,21 @@ Implement `OfficialStdioSessionFactory` and a private session using
 `ClientSession(..., read_timeout_seconds=...)`. Do not install sampling, elicitation, roots,
 logging, or custom message callbacks. Snapshot only approved fields.
 
-- [ ] **Step 4: Run focused tests and static checks**
+- [x] **Step 4: Run focused tests and static checks**
 
 Run:
 
 ```powershell
-uv run pytest tests/unit/mcp/test_sdk.py -q
-uv run pyright src/mini_code_agent/mcp/sdk.py tests/unit/mcp/test_sdk.py
+uv run pytest tests/unit/mcp/test_mcp_sdk.py -q
+uv run pyright src/mini_code_agent/mcp/sdk.py tests/unit/mcp/test_mcp_sdk.py
 ```
 
 Expected: both pass.
 
-- [ ] **Step 5: Commit the SDK boundary**
+- [x] **Step 5: Commit the SDK boundary**
 
 ```powershell
-git add src/mini_code_agent/mcp/sdk.py tests/unit/mcp/test_sdk.py
+git add src/mini_code_agent/mcp/sdk.py tests/unit/mcp/test_mcp_sdk.py
 git commit -m "feat: isolate MCP stdio SDK boundary"
 ```
 
@@ -367,9 +371,9 @@ git commit -m "feat: isolate MCP stdio SDK boundary"
 
 **Files:**
 - Create: `src/mini_code_agent/mcp/client.py`
-- Create: `tests/unit/mcp/test_client.py`
+- Create: `tests/unit/mcp/test_mcp_client.py`
 
-- [ ] **Step 1: Write failing approval-order tests**
+- [x] **Step 1: Write failing approval-order tests**
 
 Use a recording fake approver/factory. Assert approval precedes open, denial/exception/timeout
 never opens, malformed approver return fails closed, and secrets never appear in errors:
@@ -388,19 +392,19 @@ async def test_connect_requires_approval_before_process_open(tmp_path: Path) -> 
     await client.aclose()
 ```
 
-- [ ] **Step 2: Write failing lifecycle/deadline tests**
+- [x] **Step 2: Write failing lifecycle/deadline tests**
 
 Cover startup/initialize/list/close timeout, cleanup on every failure, exact contract verification,
 single-use connect, idempotent close, no partial tools, call serialization, no retries, transport
 failure, and cancellation propagation with bounded cleanup.
 
-- [ ] **Step 3: Run tests and verify failure**
+- [x] **Step 3: Run tests and verify failure**
 
-Run: `uv run pytest tests/unit/mcp/test_client.py -q`
+Run: `uv run pytest tests/unit/mcp/test_mcp_client.py -q`
 
 Expected: FAIL because `McpStdioClient` does not exist.
 
-- [ ] **Step 4: Implement the state machine**
+- [x] **Step 4: Implement the state machine**
 
 Implement:
 
@@ -434,21 +438,21 @@ class McpStdioClient:
 Apply one outer timeout per phase and an `asyncio.Lock` around calls. Do not reconnect or retry.
 Use a bounded shielded cleanup helper after cancellation/failure.
 
-- [ ] **Step 5: Run lifecycle tests**
+- [x] **Step 5: Run lifecycle tests**
 
 Run:
 
 ```powershell
-uv run pytest tests/unit/mcp/test_client.py -q
-uv run pyright src/mini_code_agent/mcp/client.py tests/unit/mcp/test_client.py
+uv run pytest tests/unit/mcp/test_mcp_client.py -q
+uv run pyright src/mini_code_agent/mcp/client.py tests/unit/mcp/test_mcp_client.py
 ```
 
 Expected: both pass.
 
-- [ ] **Step 6: Commit lifecycle ownership**
+- [x] **Step 6: Commit lifecycle ownership**
 
 ```powershell
-git add src/mini_code_agent/mcp/client.py tests/unit/mcp/test_client.py
+git add src/mini_code_agent/mcp/client.py tests/unit/mcp/test_mcp_client.py
 git commit -m "feat: govern MCP connection lifecycle"
 ```
 
@@ -456,9 +460,9 @@ git commit -m "feat: govern MCP connection lifecycle"
 
 **Files:**
 - Create: `src/mini_code_agent/mcp/tools.py`
-- Create: `tests/unit/mcp/test_tools.py`
+- Create: `tests/unit/mcp/test_mcp_tools.py`
 
-- [ ] **Step 1: Write failing adapter tests**
+- [x] **Step 1: Write failing adapter tests**
 
 Cover exact definition, host risk/side effect, stable MCP resource preview, remote routing, closed
 client, business error, call timeout, and side-effect completion-unknown errors:
@@ -473,19 +477,19 @@ async def test_preview_uses_granted_authority() -> None:
     assert preview.resources == ("mcp://local-test/tools/status",)
 ```
 
-- [ ] **Step 2: Write failing result-bound tests**
+- [x] **Step 2: Write failing result-bound tests**
 
 Test deterministic compact output, ordered text, structured JSON, output-schema revalidation,
 missing structured output, unsupported blocks, too many blocks, text/byte/depth/node/key/string
 limits, non-finite numbers, and remote `_meta` exclusion.
 
-- [ ] **Step 3: Run tests and verify failure**
+- [x] **Step 3: Run tests and verify failure**
 
-Run: `uv run pytest tests/unit/mcp/test_tools.py -q`
+Run: `uv run pytest tests/unit/mcp/test_mcp_tools.py -q`
 
 Expected: FAIL because `McpTool` and normalizer are absent.
 
-- [ ] **Step 4: Implement adapter and normalizer**
+- [x] **Step 4: Implement adapter and normalizer**
 
 Implement:
 
@@ -515,21 +519,21 @@ Serialize successful/remote-business-error payloads as:
 Omit `structured_content` when absent. Expected client/validation errors become static project
 error envelopes. Never truncate an oversized or unsupported response into success.
 
-- [ ] **Step 5: Run Tool tests**
+- [x] **Step 5: Run Tool tests**
 
 Run:
 
 ```powershell
-uv run pytest tests/unit/mcp/test_tools.py -q
-uv run pyright src/mini_code_agent/mcp/tools.py tests/unit/mcp/test_tools.py
+uv run pytest tests/unit/mcp/test_mcp_tools.py -q
+uv run pyright src/mini_code_agent/mcp/tools.py tests/unit/mcp/test_mcp_tools.py
 ```
 
 Expected: both pass.
 
-- [ ] **Step 6: Commit Tool adaptation**
+- [x] **Step 6: Commit Tool adaptation**
 
 ```powershell
-git add src/mini_code_agent/mcp/tools.py tests/unit/mcp/test_tools.py
+git add src/mini_code_agent/mcp/tools.py tests/unit/mcp/test_mcp_tools.py
 git commit -m "feat: adapt bounded MCP tools"
 ```
 
@@ -541,7 +545,7 @@ git commit -m "feat: adapt bounded MCP tools"
 - Create: `src/mini_code_agent/mcp/__init__.py`
 - Modify: `tests/smoke_test.py`
 
-- [ ] **Step 1: Write failing per-tool provenance tests**
+- [x] **Step 1: Write failing per-tool provenance tests**
 
 Prove unknown mapping keys are rejected, omitted mapping preserves current behavior, mapped MCP
 Tool reaches Hooks and Policy as extension, and mapping cannot affect schema/preview side effect:
@@ -564,7 +568,7 @@ async def test_executor_uses_host_tool_trust_mapping() -> None:
     assert policy.requests[0].trust_source is TrustSource.EXTENSION
 ```
 
-- [ ] **Step 2: Run the focused test and verify failure**
+- [x] **Step 2: Run the focused test and verify failure**
 
 Run:
 
@@ -574,7 +578,7 @@ uv run pytest tests/unit/policy/test_executor.py -q -k trust
 
 Expected: FAIL because the constructor does not accept `trust_sources`.
 
-- [ ] **Step 3: Implement immutable provenance resolution**
+- [x] **Step 3: Implement immutable provenance resolution**
 
 Add:
 
@@ -591,12 +595,12 @@ trust_source = self._trust_sources.get(call.name, self._trust_source)
 
 Use the resolved source in both `ToolHookContext` and `PolicyRequest`.
 
-- [ ] **Step 4: Export stable MCP API and extend smoke coverage**
+- [x] **Step 4: Export stable MCP API and extend smoke coverage**
 
 Export profiles, grants, limits, errors, approver protocol, client, official factory, Tool adapter,
 builder, and `schema_sha256`. Do not export raw `mcp.types` or internal session snapshots.
 
-- [ ] **Step 5: Run regression and static checks**
+- [x] **Step 5: Run regression and static checks**
 
 Run:
 
@@ -609,7 +613,7 @@ uv run pyright
 
 Expected: all pass.
 
-- [ ] **Step 6: Commit governance integration**
+- [x] **Step 6: Commit governance integration**
 
 ```powershell
 git add src/mini_code_agent/policy/executor.py src/mini_code_agent/mcp/__init__.py `
@@ -623,7 +627,7 @@ git commit -m "feat: preserve MCP extension provenance"
 - Create: `tests/integration/fixtures/mcp_stdio_server.py`
 - Create: `tests/integration/test_governed_mcp_agent.py`
 
-- [ ] **Step 1: Build an official SDK fixture server**
+- [x] **Step 1: Build an official SDK fixture server**
 
 Use `mcp.server.fastmcp.FastMCP` with fixed name/version and one deterministic read-only tool:
 
@@ -643,13 +647,14 @@ if __name__ == "__main__":
 
 Keep the fixture independent of project imports so it behaves like an external server.
 
-- [ ] **Step 2: Write a real production-factory integration test**
+- [x] **Step 2: Write a real production-factory integration test**
 
-Use `sys.executable` plus the absolute fixture path, exact schema hashes discovered from the fixed
-fixture contract, an always-approve test approver, and the production factory. Connect, call,
-close, and assert the result plus final closed state.
+Use a regular executable launcher on POSIX, the resolved Python executable on Windows, and the
+absolute fixture path. Pin exact schema hashes discovered from the fixed fixture contract, use an
+always-approve test approver, and exercise the production factory. Connect, call, close, and assert
+the result plus final closed state.
 
-- [ ] **Step 3: Write governed Agent tests**
+- [x] **Step 3: Write governed Agent tests**
 
 Compose the MCP Tool with `ToolRegistry`, `GovernedToolExecutor`, and `FakeProvider`. Assert:
 
@@ -659,7 +664,7 @@ Compose the MCP Tool with `ToolRegistry`, `GovernedToolExecutor`, and `FakeProvi
 - an ASK rule requires ordinary Tool approval despite connection approval;
 - unexpected fixture tool/schema drift prevents all Tool registration.
 
-- [ ] **Step 4: Run integration and leak assertions**
+- [x] **Step 4: Run integration and leak assertions**
 
 Run:
 
@@ -671,7 +676,7 @@ uv run pytest tests/unit/mcp tests/unit/policy/test_executor.py `
 
 Expected: all pass, and child processes terminate.
 
-- [ ] **Step 5: Commit integration evidence**
+- [x] **Step 5: Commit integration evidence**
 
 ```powershell
 git add tests/integration/fixtures/mcp_stdio_server.py `
@@ -684,7 +689,7 @@ git commit -m "test: prove governed MCP stdio execution"
 **Files:**
 - Review all source and test files changed by Tasks 1-7.
 
-- [ ] **Step 1: Run full branch coverage**
+- [x] **Step 1: Run full branch coverage**
 
 Run:
 
@@ -694,7 +699,7 @@ uv run pytest --cov=mini_code_agent --cov-branch --cov-report=term-missing
 
 Expected: all tests pass and total branch-aware coverage is at least 85%.
 
-- [ ] **Step 2: Run format, lint, type, security, and dependency gates**
+- [x] **Step 2: Run format, lint, type, security, and dependency gates**
 
 Run:
 
@@ -710,7 +715,7 @@ uv run pip-audit -r build/runtime-requirements.txt
 
 Expected: all commands pass with no vulnerabilities in the locked runtime graph.
 
-- [ ] **Step 3: Inspect dependency and trust-boundary diffs**
+- [x] **Step 3: Inspect dependency and trust-boundary diffs**
 
 Run:
 
@@ -724,7 +729,7 @@ rg -n "shell=True|create_subprocess_shell|os\\.system|subprocess\\.|instructions
 
 Expected: no shell launch, server-instruction injection, raw metadata return, or unbounded stderr.
 
-- [ ] **Step 4: Record focused hardening fixes**
+- [x] **Step 4: Record focused hardening fixes**
 
 For every issue found, first add a failing regression test, observe the expected failure, apply the
 smallest fix, rerun the focused test, and commit:
@@ -749,7 +754,7 @@ Skip the commit only when no review change is required.
 - Modify: `pyproject.toml`
 - Modify: `tests/smoke_test.py`
 
-- [ ] **Step 1: Write architecture and ADR**
+- [x] **Step 1: Write architecture and ADR**
 
 Document:
 
@@ -761,7 +766,7 @@ Document:
 - operational setup and non-claims;
 - why stdio-only, SDK v1 `<2`, exact grant sets, no dynamic refresh, and no automatic retries.
 
-- [ ] **Step 2: Add L10 learning materials**
+- [x] **Step 2: Add L10 learning materials**
 
 Add prerequisites and code anchors for:
 
@@ -772,7 +777,7 @@ Add prerequisites and code anchors for:
 - Flink Connector and Spark Catalog comparison;
 - five exercises with commands and expected evidence.
 
-- [ ] **Step 3: Add resume-ready MCP material**
+- [x] **Step 3: Add resume-ready MCP material**
 
 For the MCP highlight, include:
 
@@ -785,7 +790,7 @@ For the MCP highlight, include:
 - measurable evidence;
 - defensible non-claims and interview explanation.
 
-- [ ] **Step 4: Update user-facing release files**
+- [x] **Step 4: Update user-facing release files**
 
 Bump:
 
@@ -796,7 +801,7 @@ version = "0.14.0a0"
 Update README capability matrix/sample, SECURITY disclosure, and CHANGELOG with only verified
 claims. Add smoke assertions for package version and stable MCP imports.
 
-- [ ] **Step 5: Run release-contract tests**
+- [x] **Step 5: Run release-contract tests**
 
 Run:
 
@@ -808,7 +813,7 @@ git diff --check
 
 Expected: all pass.
 
-- [ ] **Step 6: Commit documentation and release preparation**
+- [x] **Step 6: Commit documentation and release preparation**
 
 ```powershell
 git add docs README.md SECURITY.md CHANGELOG.md pyproject.toml uv.lock tests/smoke_test.py
@@ -821,7 +826,7 @@ git commit -m "docs: prepare 0.14 MCP alpha"
 - Modify after verified release: `CHANGELOG.md`
 - Modify after verified release: `docs/learning/progress.md`
 
-- [ ] **Step 1: Run final local gates on Python 3.12 and 3.13**
+- [x] **Step 1: Run final local gates on Python 3.12 and 3.13**
 
 Run the full suite, coverage, Ruff, Pyright, Bandit, and dependency audit under both supported
 interpreters where applicable. Record exact pass/skip counts and branch coverage.

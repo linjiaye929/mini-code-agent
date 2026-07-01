@@ -39,8 +39,10 @@ existing Registry and `GovernedToolExecutor`.
 
 1. MCP configuration is trusted host composition. M5b never reads server commands or grants from
    a repository, Skill, model message, MCP server, environment-discovered file, or remote registry.
-2. A server command is an exact executable plus argument tuple. It is never passed through
-   `cmd.exe`, PowerShell, `sh`, a command string, URL opener, or shell expansion.
+2. A server command is an absolute, existing, executable, unlinked regular file plus an exact
+   argument tuple. Command and working-directory paths are revalidated immediately before launch.
+   It is never passed through `cmd.exe`, PowerShell, `sh`, a command string, URL opener, PATH
+   resolution, or shell expansion.
 3. A new server process cannot start until a dedicated connection approver sees the complete,
    untruncated command, working directory, and environment variable names and explicitly approves.
 4. Environment values are `SecretStr`, never shown in approval requests, public errors, tool
@@ -120,7 +122,7 @@ The grant does not accept server annotations, titles, descriptions, or executabl
 An immutable Pydantic model contains:
 
 - `server_id`: stable bounded host identifier;
-- `command`: executable token;
+- `command`: absolute existing executable regular-file path;
 - `args`: bounded tuple of bounded tokens;
 - `cwd`: existing absolute non-symlink directory selected by the host;
 - `environment`: bounded map from portable variable names to `SecretStr`;
@@ -132,9 +134,10 @@ An immutable Pydantic model contains:
 - bounded tool count, schema bytes, result bytes, text blocks, text characters, JSON depth, and JSON
   node limits.
 
-The profile rejects shell metacharacters only as a diagnostic concern, not as a security parser:
-tokens are passed without a shell, so characters are data. Empty/NUL-containing tokens are
-rejected. The profile retains no "auto approve" or "trust server annotations" switch.
+The profile rejects relative, missing, linked/reparse, non-regular, and non-executable command
+paths. It revalidates command and working directory before process creation to catch path drift.
+Shell metacharacters in argument tokens are data because no shell is used. Empty/NUL-containing
+tokens are rejected. The profile retains no "auto approve" or "trust server annotations" switch.
 
 ## Connection Approval
 
@@ -176,9 +179,11 @@ class McpSessionFactory(Protocol):
     async def open(self, profile: McpServerProfile) -> McpSession: ...
 ```
 
-The production factory wraps `stdio_client` and `ClientSession` with no optional client callbacks,
-uses the SDK process-tree shutdown, supplies `os.devnull` for stderr, and converts SDK Pydantic
-objects into small internal snapshots. It never exposes raw SDK objects to Agent code.
+The production factory owns `stdio_client` and `ClientSession` inside one dedicated asyncio worker,
+because the SDK's AnyIO contexts must exit in the task that entered them. The public session proxy
+can be called or closed from another task; close signals the owner worker, which performs SDK
+process-tree shutdown. No optional client callbacks are installed, stderr uses `os.devnull`, and
+SDK Pydantic objects become small internal snapshots. Raw SDK objects never reach Agent code.
 
 Tests can use a deterministic fake session. A separate real stdio integration test still proves
 the official SDK transport, handshake, listing, call, and shutdown path.
@@ -381,10 +386,12 @@ wording states that completion is unknown. Read-only failures can use ordinary f
 
 ### Real stdio integration
 
-A tiny test server built with the official SDK exposes one read-only deterministic tool. The test
-starts it through the production factory using `sys.executable`, verifies handshake identity and
-schema hashes, executes through `AgentRuntime` plus `GovernedToolExecutor`, and confirms process
-shutdown. A sibling malicious fixture proves unexpected tool and schema drift are rejected.
+A tiny test server built with the official SDK exposes one read-only deterministic tool. On POSIX,
+the test creates a regular executable launcher whose shebang targets the active environment because
+the venv Python path is normally a symlink; on Windows it uses the resolved Python executable. The
+production factory verifies handshake identity and schema hashes, executes through `AgentRuntime`
+plus `GovernedToolExecutor`, and confirms process shutdown. A sibling malicious fixture proves
+unexpected tool and schema drift are rejected.
 
 ### Release gates
 

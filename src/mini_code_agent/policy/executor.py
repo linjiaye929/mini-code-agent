@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import asyncio
 import json
+from collections.abc import Mapping
 from typing import Literal, Protocol, cast
 
 from mini_code_agent.domain.content import ToolCall, ToolResult
@@ -36,6 +37,7 @@ class GovernedToolExecutor:
         approval: ApprovalHandler,
         session_mode: SessionMode,
         trust_source: TrustSource,
+        trust_sources: Mapping[str, TrustSource] | None = None,
         guard: ActionGuard | None = None,
         hooks: ToolHookRunner | None = None,
     ) -> None:
@@ -44,6 +46,15 @@ class GovernedToolExecutor:
         self._approval = approval
         self._session_mode = session_mode
         self._trust_source = trust_source
+        raw_overrides = dict(cast(Mapping[str, object], trust_sources or {}))
+        registered_names = {item.name for item in registry.definitions}
+        if not set(raw_overrides).issubset(registered_names):
+            raise ValueError("Tool trust sources must reference registered tools.")
+        if any(not isinstance(value, TrustSource) for value in raw_overrides.values()):
+            raise ValueError("Tool trust sources must be TrustSource values.")
+        self._trust_sources = {
+            key: cast(TrustSource, value) for key, value in raw_overrides.items()
+        }
         self._guard = guard
         self._hooks = hooks
 
@@ -54,6 +65,9 @@ class GovernedToolExecutor:
     @property
     def definitions(self) -> tuple[ToolDefinition, ...]:
         return self._registry.definitions
+
+    def trust_source_for(self, tool_name: str) -> TrustSource:
+        return self._trust_sources.get(tool_name, self._trust_source)
 
     async def execute(self, call: ToolCall) -> ToolResult:
         validation_error = self._registry.validate(call)
@@ -67,6 +81,7 @@ class GovernedToolExecutor:
                 "unknown_tool",
                 "The requested tool is not registered.",
             )
+        trust_source = self.trust_source_for(call.name)
 
         preview = await self._preview(call, definition, tool)
         if preview is None:
@@ -89,7 +104,7 @@ class GovernedToolExecutor:
                 definition=definition,
                 preview=preview,
                 session_mode=self._session_mode,
-                trust_source=self._trust_source,
+                trust_source=trust_source,
             )
             hook_result = await self._hooks.before_tool(hook_context)
             if not hook_result.allowed:
@@ -102,7 +117,7 @@ class GovernedToolExecutor:
                 resources=preview.resources,
                 command=preview.command or (),
                 session_mode=self._session_mode,
-                trust_source=self._trust_source,
+                trust_source=trust_source,
             )
         )
         if policy_result.decision is PolicyDecision.DENY:

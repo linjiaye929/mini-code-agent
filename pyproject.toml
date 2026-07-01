@@ -1,6 +1,6 @@
 [project]
 name = "mini-code-agent"
-version = "0.13.0a0"
+version = "0.14.0a0"
 description = "A framework-light, provider-neutral, enterprise-grade mini code agent."
 readme = "README.md"
 requires-python = ">=3.12,<3.14"
@@ -23,6 +23,7 @@ dependencies = [
     "httpx>=0.28,<1",
     "httpx-sse>=0.4,<1",
     "jsonschema>=4.23,<5",
+    "mcp>=1.28.1,<2",
     "platformdirs>=4.3,<5",
     "pydantic>=2.10,<3",
     "pydantic-settings>=2.7,<3",
@@ -53,6 +54,25 @@ dev = [
 
 [tool.hatch.build.targets.wheel]
 packages = ["src/mini_code_agent"]
+
+[tool.hatch.build.targets.sdist]
+exclude = [
+    "/.coverage",
+    "/.env",
+    "/.git",
+    "/.idea",
+    "/.mini-code-agent",
+    "/.pytest_cache",
+    "/.pyright",
+    "/.ruff_cache",
+    "/.venv",
+    "/.vscode",
+    "/.worktrees",
+    "/build",
+    "/dist",
+    "/htmlcov",
+    "**/__pycache__",
+]
 
 [tool.pytest.ini_options]
 addopts = ["-ra", "--strict-config", "--strict-markers"]

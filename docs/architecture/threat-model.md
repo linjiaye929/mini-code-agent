@@ -70,6 +70,19 @@
   establishes success.
 - SQLite schema v3 stores a separate bounded hash-chained Repair lifecycle; interrupted Repair
   rows are not automatically resumed.
+- M5a Skills are inert bounded Markdown from explicit roots; source-qualified identity, restricted
+  YAML, regular-file checks, fingerprint-required load, and TOCTOU revalidation prevent executable
+  registration and silent source shadowing.
+- M5a pre-Tool Hooks are host code that may continue to Policy or veto; they cannot grant
+  authority. Post-Hook failures cannot replace an actual ToolResult.
+- M5b local MCP requires an absolute executable, exact argv/cwd/environment names, explicit
+  connection approval, protocol/server identity, a static complete Tool list, host-owned
+  side-effect/risk, and canonical input/output-schema hashes.
+- Verified MCP aliases use `TrustSource.EXTENSION` and still pass Tool Schema, ActionPreview,
+  Hooks, Policy, and optional Tool approval. Result text/JSON, lifecycle deadlines, and SDK
+  snapshots have independent limits.
+- Server instructions, descriptions, annotations, icons, metadata, stderr, `_meta`, image, audio,
+  and resource content do not enter MCP model-facing Tool contracts or successful results.
 
 ## Non-claims
 
@@ -128,4 +141,8 @@
 - An incomplete Repair trace is not proof that no side effect occurred, and M4c provides no
   automatic crash Resume, rollback, or external exactly-once guarantee.
 - Configured-value scrubbing cannot detect unknown secrets, and SQLite is not encrypted at rest.
-- MCP connection does not establish trust.
+- MCP connection and schema equality do not establish executable provenance, implementation
+  safety, read-only behavior, or sandboxing. A local server can act with user privileges during
+  startup before any Tool Policy decision.
+- Stdio restricts protocol access to child pipes but not filesystem, network, process, or
+  credential authority. Timeout/termination cannot prove a remote side effect did not complete.

@@ -10,11 +10,11 @@
 | L5 File/Edit/Command/Git tools | Complete locally | Read/Search/Write/Edit/argv Command plus hardened Git status/diff |
 | L6 Context Budget | Complete locally | Deterministic estimator, atomic selection, side-effect pinning, runtime integration |
 | L7 Session/Checkpoint/Trace | Complete locally | M3b Trace plus M3c stable Checkpoint/fail-closed Resume |
-| L8 Git/test/repair | Complete locally | M4a Git + M4b Pytest + M4c bounded Repair; release gates pending |
-| L9 Skills and Hooks | Not started | |
-| L10 MCP | Not started | |
+| L8 Git/test/repair | Complete and released | M4a Git + M4b Pytest + M4c bounded Repair |
+| L9 Skills and Hooks | Complete and released | Inert Skills + monotonic Tool Hooks; v0.13 evidence |
+| L10 MCP | Complete locally | Governed stdio, exact grants, real SDK integration; release gates pending |
 | L11 Subagent and Worktree | Not started | |
-| L12 CI, benchmark and release | In progress | v0.12 GitHub prerelease and Windows/Linux CI succeeded; benchmark pending |
+| L12 CI, benchmark and release | In progress | v0.13 GitHub prerelease succeeded; v0.14 MCP release pending |
 
 ## L0 Notes
 
@@ -644,3 +644,60 @@
 - Annotated tag `v0.13.0-alpha.0` 解引用到上述合并提交。非 draft GitHub prerelease
   <https://github.com/linjiayebat/mini-code-agent/releases/tag/v0.13.0-alpha.0> 已发布；
   远端 wheel/sdist 的名称、大小和 SHA-256 digest 与本地四组 smoke 制品完全一致。
+
+## M5b Governed MCP Notes
+
+- MCP 是互操作协议，不是权限系统。local stdio server 在 initialize 前后都已经是拥有当前
+  用户 OS 权限的进程，因此必须在 process open 前单独审批完整 executable/argv/cwd。
+- Profile 要求 absolute existing executable；command/cwd 在构造和启动前各校验一次，
+  拒绝 relative、missing、symlink、junction/reparse、non-regular 和不可执行路径。
+- connection approval 只授权启动一个进程。每次 ToolCall 仍走 Registry、ActionPreview、
+  Hook、Policy 和 Tool approval；MCP alias 的 provenance 固定为
+  `TrustSource.EXTENSION`。
+- server identity、protocol 和 Tools capability 通过后，仍要把 `tools/list` 与 host grant
+  做 exact set equality。unexpected/missing/duplicate/pagination/listChanged/task-required
+  或 schema hash drift 都让整次连接失败，不做 partial admission。
+- host grant 决定 local alias、description、SideEffect 和 RiskLevel。server instructions、
+  title、description、annotation、icons 与 `_meta` 不进入 model Tool definition。
+- SDK v1 的 stdio/ClientSession 使用 AnyIO context，退出具有 Task affinity。production
+  adapter 让 dedicated owner worker 进入/退出 context，caller Task 只通过 proxy 发请求和
+  signal close，避免跨 Task cancel-scope 与 Windows pipe 泄漏。
+- result 只接受 text 与 object-shaped structured JSON，并经过 block/char/UTF-8 byte/
+  depth/node/string/finite-number/output-schema 上限；unsupported content 整体失败。
+- 调用串行且不自动 retry。read-only timeout 可报告 timeout；side-effect Tool timeout/
+  cancellation 只能报告 completion unknown，不能声称远端操作已回滚。
+- stderr 丢弃可以避免无界日志和 secret 进入 Trace，但会降低诊断能力。M5b 不宣称 durable
+  MCP lifecycle audit、package signature、argument-file hash 或 OS sandbox。
+
+## M5b Exercises
+
+1. 跟踪 `McpServerProfile -> approval_request -> build_stdio_parameters`，列出哪一层能看到
+   SecretStr 值，哪一层只能看到环境变量名称。
+2. 修改 fixture server name/version，比较 identity mismatch 与 input schema drift 的
+   error code 和共同的“零 Tool admission”结果。
+3. 在 server description 和 `_meta` 放入 secret/prompt injection，证明 snapshot 和
+   model-facing definition 都不包含它。
+4. 用 extension deny Policy 调用真实 stdio Tool，检查 call log 不存在；再改成 ASK 且拒绝
+   Tool approval，证明 connection approval 不能替代 action approval。
+5. 从另一个 asyncio Task 调用 `aclose()`，画出 owner worker、proxy 和 AnyIO context 的
+   任务关系。
+6. 构造 129 个 Tool、129 个 text block、超长 text、深层 JSON 和 NaN，验证 global/profile
+   两级预算及静态错误。
+7. 把一个 read-only grant 改为 WRITE 并制造 timeout，说明为什么 output 使用
+   `mcp_tool_completion_unknown`。
+8. 阅读官方 MCP security best practices，写出 local stdio 与 remote HTTP/OAuth threat
+   model 不能共用的五个边界。
+
+## M5b Local Verification
+
+- 截至 release preparation 前，Python 3.13.14 全量开发套件为 960 passed、10 skipped；
+  skip 均为 Windows 缺少 symlink privilege，包括新增 executable/cwd link 防护。
+- branch-aware package coverage 为 90.82%，超过配置的 85% 门槛。
+- Ruff format/check、strict Pyright 和 Bandit 已通过。
+- 对 `uv export --locked --no-dev --no-emit-project` 生成的运行时依赖使用 Python 3.13
+  执行 pip-audit，结果为 `No known vulnerabilities found`。
+- 真实官方 SDK stdio 集成覆盖 handshake、exact identity/schema、Agent ToolCall、structured
+  output、shutdown、extension deny、独立 Tool approval、unexpected Tool、schema drift 和
+  cross-task close。
+- 上述为本地开发证据；Python 3.12 复验、GitHub Actions、wheel/sdist smoke、tag、Release
+  URL 与 artifact SHA-256 必须在 `v0.14.0-alpha.0` 发布后回填，当前不提前声明。

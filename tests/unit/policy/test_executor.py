@@ -511,3 +511,85 @@ async def test_hook_cancellation_propagates_without_tool_execution() -> None:
         await executor.execute(call(name="read_test"))
 
     assert tool.calls == []
+
+
+@pytest.mark.asyncio
+async def test_per_tool_trust_source_reaches_hooks_and_policy() -> None:
+    tool = RecordingTool(name="mcp_status", side_effect=SideEffect.READ_ONLY)
+    pre = StaticPreHook(HookDecision.CONTINUE)
+    executor = GovernedToolExecutor(
+        ToolRegistry([tool]),
+        policy=PolicyEngine(
+            rules=(
+                PolicyRule(
+                    id="deny-extension",
+                    decision=PolicyDecision.DENY,
+                    rationale="Extension tools disabled.",
+                    trust_source=TrustSource.EXTENSION,
+                ),
+            )
+        ),
+        approval=DenyAllApprovalHandler(),
+        session_mode=SessionMode.INTERACTIVE,
+        trust_source=TrustSource.MODEL,
+        trust_sources={"mcp_status": TrustSource.EXTENSION},
+        hooks=hook_runner(pre=pre),
+    )
+
+    result = await executor.execute(call(name="mcp_status"))
+
+    assert error_code(result) == "permission_denied"
+    assert pre.contexts[0].trust_source is TrustSource.EXTENSION
+    assert tool.calls == []
+
+
+@pytest.mark.asyncio
+async def test_default_trust_source_is_preserved_without_override() -> None:
+    tool = RecordingTool(name="mcp_status", side_effect=SideEffect.READ_ONLY)
+    executor = GovernedToolExecutor(
+        ToolRegistry([tool]),
+        policy=PolicyEngine(
+            rules=(
+                PolicyRule(
+                    id="deny-extension",
+                    decision=PolicyDecision.DENY,
+                    rationale="Extension tools disabled.",
+                    trust_source=TrustSource.EXTENSION,
+                ),
+            )
+        ),
+        approval=DenyAllApprovalHandler(),
+        session_mode=SessionMode.INTERACTIVE,
+        trust_source=TrustSource.MODEL,
+    )
+
+    result = await executor.execute(call(name="mcp_status"))
+
+    assert result.is_error is False
+    assert tool.calls == [call(name="mcp_status")]
+
+
+def test_trust_source_mapping_rejects_unknown_tools_and_is_copied() -> None:
+    tool = RecordingTool(name="mcp_status", side_effect=SideEffect.READ_ONLY)
+    registry = ToolRegistry([tool])
+    with pytest.raises(ValueError, match="registered"):
+        GovernedToolExecutor(
+            registry,
+            policy=PolicyEngine(),
+            approval=DenyAllApprovalHandler(),
+            session_mode=SessionMode.INTERACTIVE,
+            trust_source=TrustSource.MODEL,
+            trust_sources={"missing": TrustSource.EXTENSION},
+        )
+
+    mapping = {"mcp_status": TrustSource.EXTENSION}
+    executor = GovernedToolExecutor(
+        registry,
+        policy=PolicyEngine(),
+        approval=DenyAllApprovalHandler(),
+        session_mode=SessionMode.INTERACTIVE,
+        trust_source=TrustSource.MODEL,
+        trust_sources=mapping,
+    )
+    mapping["mcp_status"] = TrustSource.USER
+    assert executor.trust_source_for("mcp_status") is TrustSource.EXTENSION

@@ -736,27 +736,83 @@
 
 ### L10：MCP
 
-**理论**
+**前置知识**
 
-- MCP 包括客户端、服务器、能力和传输。
-- 远程 MCP 工具仍需经过本地 Registry 与 Policy。
-- 连接成功不代表工具可信。
+- JSON-RPC 2.0 的 request/response/notification、ID 关联和协议错误；MCP 在其上定义
+  initialization、operation、shutdown 三阶段。
+- capability negotiation：客户端和服务器只能使用双方声明并支持的能力；协议兼容不等于
+  对服务端代码、描述、annotation 或 Tool 行为的信任。
+- `stdio` 是父子进程管道，不是 shell，也不是 sandbox。要区分 argv token、stdin/stdout
+  协议流、stderr、cwd、environment 和 process-tree shutdown。
+- `asyncio.timeout`、`CancelledError`、异步 context manager 与 task affinity。超时表示
+  “不再等待”，不证明远端副作用没有发生。
+- JSON Schema Draft 2020-12、canonical JSON、SHA-256 和 schema validation。哈希只能证明
+  当前合同与已审核字节一致，不能证明实现安全。
+- Prompt Injection 不只来自 Prompt：Tool description、server instructions、annotation、
+  result text 和 structured content 都是不可信 wire data。
 
-**Python**
+**本项目用到的知识**
 
-- JSON-RPC、stdio 异步流、生命周期和资源清理。
+- 首版固定官方稳定 SDK `mcp>=1.28.1,<2`、协议 `2025-11-25` 和 direct local stdio，只支持
+  Tools；HTTP/OAuth/Resources/Prompts/Roots/Sampling/Elicitation/Tasks 均不开放。
+- `McpServerProfile` 由宿主创建，固定 absolute executable、argv、cwd、SecretStr
+  environment、server identity、Tool grants 与所有资源上限；启动前再次校验 command/cwd。
+- connection approval 在 process open 前展示完整 command/cwd 和环境变量名称；值不展示。
+  这与单次 Tool approval 是两个不同授权。
+- initialization 必须匹配 protocol、server name/version、Tools capability，并拒绝
+  `tools.listChanged`。
+- `tools/list` 只接受一页，远端 Tool 名称集合必须与 host grants 完全相等；extra/missing/
+  duplicate/pagination/task-required/schema drift 任一出现都不注册任何 Tool。
+- `McpToolGrant` 绑定 remote name、local alias、host description、SideEffect、RiskLevel 和
+  input/output schema SHA-256；服务端 description/title/annotation/instructions 不提供权限。
+- production SDK adapter 用 owner worker 持有 stdio/ClientSession context，解决 AnyIO
+  context 必须在进入 Task 退出的问题，外部 Task 通过 proxy 使用和关闭。
+- 本地 alias 实现普通 `RegisteredTool`，调用继续经过 Schema -> ActionPreview -> Hook ->
+  Policy -> approval -> Tool；per-tool provenance 固定为 `TrustSource.EXTENSION`。
+- 结果只接受 bounded text 和 object-shaped structured JSON。图片、音频、resource、
+  `_meta`、超限、非有限数值或 output-schema mismatch 整体失败，不返回截断成功。
+- 调用串行且零重试。read-only timeout 返回 timeout；write/execute/network timeout 返回
+  completion unknown，因为取消和 kill 不能回滚已发生副作用。
 
-**工程**
+**Java/Flink/Spark 映射**
 
-- 初始化、能力协商、工具同步和断线恢复。
-- MCP Schema 映射到内部 ToolDefinition。
-- 输出大小、超时和权限限制。
+| 既有经验 | MCP 对应概念 | 关键差异 |
+|---|---|---|
+| Java RPC client/stub | `ClientSession` + Tool proxy | MCP Tool 由模型选择，必须再经过本地 Policy |
+| API Gateway allowlist | host-pinned Tool grants | grant 同时钉住名称、schema、side effect 和 risk |
+| Java SPI/ServiceLoader | `tools/list` discovery | 远端 metadata 不会动态加载本地代码，也不能自动获权 |
+| Bean Validation/OpenAPI | JSON Schema input/output | schema 来自不可信 server，先验证并比对审核 hash |
+| ProcessBuilder(argv) | `StdioServerParameters` | 绝对 executable、无 shell、启动前独立审批 |
+| try-with-resources | async context manager/owner worker | AnyIO context 有 Task affinity，不能跨 Task 随意退出 |
+| Flink Connector handshake | initialize/capability negotiation | capability 是协议可用性，不是 exactly-once 或安全证明 |
+| Flink source cancellation | MCP timeout/cancel/shutdown | 已提交到外部系统的副作用仍可能完成 |
+| Spark Catalog contract | Tool list + schema | 本项目拒绝运行期动态表/Tool 刷新，升级需重新审核 |
+
+**代码阅读顺序**
+
+1. `mcp/models.py`：Profile、Grant、Secret、limit、snapshot 和静态错误。
+2. `mcp/contracts.py`：canonical schema hash、server identity 和 exact Tool-set 验证。
+3. `mcp/sdk.py`：官方 SDK 防腐层、snapshot 丢弃规则和 owner-worker 生命周期。
+4. `mcp/client.py`：双审批前半部分、状态机、deadline、调用串行和 fail-closed cleanup。
+5. `mcp/tools.py`：ActionPreview、结果 JSON 预算、output schema 和 Tool error envelope。
+6. `policy/executor.py`：per-tool `TrustSource.EXTENSION` 如何进入 Hook 与 Policy。
+7. `tests/integration/test_governed_mcp_agent.py`：真实 stdio、deny/ask、schema drift 和跨 Task
+   close 证据。
 
 **验收练习**
 
-- 连接最小 MCP Server 并调用工具。
-- Server 崩溃后 Agent 受控失败。
-- MCP 工具不能绕过 Workspace 和权限规则。
+1. 用 `schema_sha256` 分别计算 key 顺序不同但语义相同的 schema，解释 hash 为什么相同。
+2. 将 fixture 增加一个未授权 Tool，跟踪 connection failure，证明没有部分 alias 被注册。
+3. 修改 input schema 的 `string` 为 `integer`，说明 server identity 相同为何仍必须拒绝。
+4. 在 server description/instructions/annotation 写“忽略 Policy”，验证模型看到的是 host
+   description，extension deny 仍发生在远端 call 前。
+5. 分别拒绝 connection approval 和 Tool approval，列出两次都不会发生的 I/O。
+6. 从另一个 asyncio Task 关闭 production client，解释 owner worker 解决的 AnyIO
+   cancel-scope 问题。
+7. 让 write 类 Tool 超时，解释为什么正确结果是 completion unknown，而不是“执行失败且
+   未产生副作用”。
+8. 设计 HTTP MCP 下一阶段的 threat model，至少列出 OAuth audience、SSRF、redirect、
+   token storage、endpoint identity、TLS 和 scope minimization；不要直接复用 stdio Profile。
 
 ### L11：Subagent 与 Worktree
 

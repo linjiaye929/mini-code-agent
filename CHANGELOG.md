@@ -4,6 +4,50 @@ All notable changes follow Keep a Changelog. Versions follow Semantic Versioning
 
 ## [Unreleased]
 
+## [0.14.0-alpha.0] - 2026-07-01
+
+### Added
+
+- Host-pinned local MCP stdio profiles with absolute executable/cwd validation, SecretStr
+  environment values, independent connection approval, fixed identity, exact Tool grants, and
+  lifecycle/content budgets.
+- Official stable MCP Python SDK v1 adapter for protocol `2025-11-25`, with dedicated owner-worker
+  lifecycle management, bounded snapshots, process-tree shutdown, and discarded stderr.
+- Canonical JSON Schema SHA-256 verification for complete non-paginated Tool sets; host-owned
+  local aliases, descriptions, side-effect classes, and risk levels.
+- MCP `RegisteredTool` adapters with governed ActionPreview, deterministic text/structured JSON
+  results, output-schema validation, and static public errors.
+- Per-Tool trust provenance in `GovernedToolExecutor`, allowing MCP aliases to reach Hooks and
+  Policy as `TrustSource.EXTENSION` while preserving the constructor default for native Tools.
+- Real official-SDK stdio/Agent integration proving handshake, call, structured output, shutdown,
+  extension deny, independent Tool approval, schema drift rejection, and cross-task close.
+
+### Changed
+
+- Added `mcp>=1.28.1,<2` as a bounded runtime dependency. SDK v2 remains pre-release and is not
+  selected.
+- `GovernedToolExecutor` accepts an optional copied mapping from registered Tool names to
+  `TrustSource`; unknown names and invalid values fail construction.
+- MCP unit test filenames are globally unique so Pytest's default import mode can collect the
+  complete suite with existing command/skill tests.
+
+### Security
+
+- MCP commands must be absolute existing executable regular files; command and cwd reject
+  symlink/reparse paths and are revalidated immediately before process launch.
+- Process approval shows complete argv/cwd and environment names before any server code runs.
+  Environment values remain secret, and connection approval never replaces per-Tool Policy or
+  approval.
+- Protocol/server identity, Tools capability, static Tool list, exact grant set, schema hashes,
+  and task mode all fail closed before any alias is published.
+- Server instructions, descriptions, titles, annotations, icons, `_meta`, and stderr do not enter
+  model-facing definitions or results.
+- Results reject image/audio/resource content, non-finite or excessive JSON, oversized text/bytes,
+  and successful output-schema mismatches without returning partial success.
+- Local stdio processes retain the Agent user's OS authority. M5b does not claim sandboxing,
+  executable provenance, package safety, remote MCP/OAuth security, rollback, or exactly-once
+  side effects.
+
 ## [0.13.0-alpha.0] - 2026-07-01
 
 ### Added

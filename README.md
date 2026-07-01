@@ -2,14 +2,15 @@
 
 A framework-light, provider-neutral coding agent built from first principles.
 
-> Status: pre-alpha. M5a provides a provider-neutral Agent Core, Anthropic/OpenAI-compatible
+> Status: pre-alpha. M5b provides a provider-neutral Agent Core, Anthropic/OpenAI-compatible
 > adapters, a schema-validating Tool Registry, a cross-platform Workspace boundary, bounded
 > Read/Search, conflict-aware Write/Edit, policy-governed argv command execution, and deterministic
 > context admission, hardened read-only Git evidence, governed Pytest diagnostics, versioned SQLite
 > Session/Trace persistence, fail-closed Checkpoint/Resume, and a host-controlled bounded Repair
-> loop, provenance-aware lazy Skills, and deterministic host-registered Tool Hooks. OS sandboxing,
-> shell-string execution, project-provided executable Hooks, automatic Repair resume, MCP, and
-> live-provider CI are not implemented.
+> loop, provenance-aware lazy Skills, deterministic host-registered Tool Hooks, and host-pinned
+> local MCP stdio Tools. OS sandboxing, shell-string execution, project-provided executable Hooks,
+> automatic Repair resume, remote HTTP/OAuth MCP, Subagents/Worktrees, and live-provider CI are not
+> implemented.
 
 ## Requirements
 
@@ -217,6 +218,24 @@ actual result; timeout, exception, or invalid return cannot replace it. Reposito
 prompt Hooks and dynamic Python imports are not supported. In-process Hooks have the Agent
 process authority and are not sandboxed. See `docs/architecture/governed-extensions.md`.
 
+## Governed MCP Stdio
+
+Local MCP Tools use the official stable Python SDK v1 over direct stdio. A trusted host profile
+pins an absolute executable/argv/cwd, server identity, exact Tool grant set, host-owned
+description/side-effect/risk, canonical input/output-schema hashes, and hard lifecycle/content
+limits.
+
+Starting the process requires dedicated connection approval. Verified local aliases still pass
+through the ordinary Tool Registry, Hooks, Policy, and optional Tool approval with
+`TrustSource.EXTENSION`. Server instructions, descriptions, annotations, icons, and `_meta` are
+not authority and are not copied into model-facing definitions.
+
+Only bounded text and object-shaped structured JSON results are accepted. Calls are serialized
+and never retried; a timed-out side-effecting Tool reports uncertain completion. Stdio and user
+approval are not OS sandboxing. Remote HTTP/OAuth, Resources, Prompts, Roots, Sampling,
+Elicitation, Tasks, dynamic Tool lists, and package installation are not supported. See
+`docs/architecture/governed-mcp.md`.
+
 ## Documentation
 
 - Product design: `docs/superpowers/specs/2026-06-29-mini-code-agent-design.md`
@@ -235,6 +254,7 @@ process authority and are not sandboxed. See `docs/architecture/governed-extensi
 - Governed test execution: `docs/architecture/governed-test-execution.md`
 - Bounded Repair loop: `docs/architecture/bounded-repair-loop.md`
 - Governed Skills and Hooks: `docs/architecture/governed-extensions.md`
+- Governed MCP stdio: `docs/architecture/governed-mcp.md`
 - Threat model: `docs/architecture/threat-model.md`
 - Provider protocol ADR: `docs/adr/0002-provider-wire-protocols.md`
 - Workspace boundary ADR: `docs/adr/0003-workspace-boundary.md`
@@ -247,6 +267,7 @@ process authority and are not sandboxed. See `docs/architecture/governed-extensi
 - Fixed Pytest/JUnit boundary ADR: `docs/adr/0010-fixed-pytest-junit-boundary.md`
 - Host-controlled bounded Repair ADR: `docs/adr/0011-host-controlled-bounded-repair.md`
 - Inert Skills and host Hooks ADR: `docs/adr/0012-inert-skills-host-hooks.md`
+- Host-pinned stdio MCP ADR: `docs/adr/0013-host-pinned-stdio-mcp.md`
 
 ## License
 
