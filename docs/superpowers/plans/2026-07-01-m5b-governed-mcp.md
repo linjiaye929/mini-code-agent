@@ -821,7 +821,7 @@ git commit -m "docs: prepare 0.14 MCP alpha"
 - Modify after verified release: `CHANGELOG.md`
 - Modify after verified release: `docs/learning/progress.md`
 
-- [ ] **Step 1: Run final local gates on Python 3.12 and 3.13**
+- [x] **Step 1: Run final local gates on Python 3.12 and 3.13**
 
 Run the full suite, coverage, Ruff, Pyright, Bandit, and dependency audit under both supported
 interpreters where applicable. Record exact pass/skip counts and branch coverage.
