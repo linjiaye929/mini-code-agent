@@ -29,11 +29,11 @@ JSON Schema Draft 2020-12, asyncio/AnyIO stdio lifecycle, Pytest, Ruff, strict P
 - `src/mini_code_agent/mcp/client.py`: approval, lifecycle, timeout, cleanup, and serialized calls.
 - `src/mini_code_agent/mcp/tools.py`: `RegisteredTool` adapters and bounded result normalization.
 - `tests/unit/mcp/helpers.py`: deterministic grant/profile/session builders shared by MCP tests.
-- `tests/unit/mcp/test_models.py`: profile, secret, approval, bounds, and error tests.
-- `tests/unit/mcp/test_contracts.py`: schema hashing and listing verification tests.
-- `tests/unit/mcp/test_sdk.py`: SDK snapshot conversion and stdio parameter tests.
-- `tests/unit/mcp/test_client.py`: connection state, deadline, cleanup, and concurrency tests.
-- `tests/unit/mcp/test_tools.py`: preview, routing, result normalization, and error tests.
+- `tests/unit/mcp/test_mcp_models.py`: profile, secret, approval, bounds, and error tests.
+- `tests/unit/mcp/test_mcp_contracts.py`: schema hashing and listing verification tests.
+- `tests/unit/mcp/test_mcp_sdk.py`: SDK snapshot conversion and stdio parameter tests.
+- `tests/unit/mcp/test_mcp_client.py`: connection state, deadline, cleanup, and concurrency tests.
+- `tests/unit/mcp/test_mcp_tools.py`: preview, routing, result normalization, and error tests.
 - `tests/integration/fixtures/mcp_stdio_server.py`: official SDK deterministic test server.
 - `tests/integration/test_governed_mcp_agent.py`: real stdio plus Agent/Policy integration.
 - `docs/architecture/governed-mcp.md`: operational architecture and threat boundaries.
@@ -60,7 +60,7 @@ JSON Schema Draft 2020-12, asyncio/AnyIO stdio lifecycle, Pytest, Ruff, strict P
 - Modify: `uv.lock`
 - Create: `src/mini_code_agent/mcp/models.py`
 - Create: `tests/unit/mcp/helpers.py`
-- Create: `tests/unit/mcp/test_models.py`
+- Create: `tests/unit/mcp/test_mcp_models.py`
 
 - [x] **Step 1: Add and lock the stable SDK**
 
@@ -108,7 +108,7 @@ def test_profile_rejects_duplicate_remote_and_local_tool_names(tmp_path: Path) -
 
 - [x] **Step 3: Run tests and verify collection fails**
 
-Run: `uv run pytest tests/unit/mcp/test_models.py -q`
+Run: `uv run pytest tests/unit/mcp/test_mcp_models.py -q`
 
 Expected: FAIL because `mini_code_agent.mcp.models` does not exist.
 
@@ -174,7 +174,7 @@ and grant tuples. `approval_request()` returns names, never secret values.
 Run:
 
 ```powershell
-uv run pytest tests/unit/mcp/test_models.py -q
+uv run pytest tests/unit/mcp/test_mcp_models.py -q
 uv run pyright src/mini_code_agent/mcp/models.py tests/unit/mcp
 ```
 
@@ -191,7 +191,7 @@ git commit -m "feat: define governed MCP contracts"
 
 **Files:**
 - Create: `src/mini_code_agent/mcp/contracts.py`
-- Create: `tests/unit/mcp/test_contracts.py`
+- Create: `tests/unit/mcp/test_mcp_contracts.py`
 
 - [x] **Step 1: Write failing canonicalization tests**
 
@@ -237,7 +237,7 @@ def test_verified_definition_uses_host_authority() -> None:
 
 - [x] **Step 3: Run tests and verify failure**
 
-Run: `uv run pytest tests/unit/mcp/test_contracts.py -q`
+Run: `uv run pytest tests/unit/mcp/test_mcp_contracts.py -q`
 
 Expected: FAIL because contract functions are absent.
 
@@ -273,8 +273,8 @@ equality, and sorted local output. Reject `next_cursor` and dynamic tool-list ca
 Run:
 
 ```powershell
-uv run pytest tests/unit/mcp/test_contracts.py -q
-uv run pyright src/mini_code_agent/mcp/contracts.py tests/unit/mcp/test_contracts.py
+uv run pytest tests/unit/mcp/test_mcp_contracts.py -q
+uv run pyright src/mini_code_agent/mcp/contracts.py tests/unit/mcp/test_mcp_contracts.py
 ```
 
 Expected: both pass.
@@ -282,7 +282,7 @@ Expected: both pass.
 - [x] **Step 6: Commit verification**
 
 ```powershell
-git add src/mini_code_agent/mcp/contracts.py tests/unit/mcp/test_contracts.py
+git add src/mini_code_agent/mcp/contracts.py tests/unit/mcp/test_mcp_contracts.py
 git commit -m "feat: pin MCP server tool contracts"
 ```
 
@@ -290,7 +290,7 @@ git commit -m "feat: pin MCP server tool contracts"
 
 **Files:**
 - Create: `src/mini_code_agent/mcp/sdk.py`
-- Create: `tests/unit/mcp/test_sdk.py`
+- Create: `tests/unit/mcp/test_mcp_sdk.py`
 
 - [x] **Step 1: Write failing SDK conversion tests**
 
@@ -316,7 +316,7 @@ def test_stdio_parameters_unwrap_only_explicit_secrets(tmp_path: Path) -> None:
 
 - [x] **Step 2: Run tests and verify failure**
 
-Run: `uv run pytest tests/unit/mcp/test_sdk.py -q`
+Run: `uv run pytest tests/unit/mcp/test_mcp_sdk.py -q`
 
 Expected: FAIL because the SDK adapter is absent.
 
@@ -350,8 +350,8 @@ logging, or custom message callbacks. Snapshot only approved fields.
 Run:
 
 ```powershell
-uv run pytest tests/unit/mcp/test_sdk.py -q
-uv run pyright src/mini_code_agent/mcp/sdk.py tests/unit/mcp/test_sdk.py
+uv run pytest tests/unit/mcp/test_mcp_sdk.py -q
+uv run pyright src/mini_code_agent/mcp/sdk.py tests/unit/mcp/test_mcp_sdk.py
 ```
 
 Expected: both pass.
@@ -359,7 +359,7 @@ Expected: both pass.
 - [x] **Step 5: Commit the SDK boundary**
 
 ```powershell
-git add src/mini_code_agent/mcp/sdk.py tests/unit/mcp/test_sdk.py
+git add src/mini_code_agent/mcp/sdk.py tests/unit/mcp/test_mcp_sdk.py
 git commit -m "feat: isolate MCP stdio SDK boundary"
 ```
 
@@ -367,7 +367,7 @@ git commit -m "feat: isolate MCP stdio SDK boundary"
 
 **Files:**
 - Create: `src/mini_code_agent/mcp/client.py`
-- Create: `tests/unit/mcp/test_client.py`
+- Create: `tests/unit/mcp/test_mcp_client.py`
 
 - [x] **Step 1: Write failing approval-order tests**
 
@@ -396,7 +396,7 @@ failure, and cancellation propagation with bounded cleanup.
 
 - [x] **Step 3: Run tests and verify failure**
 
-Run: `uv run pytest tests/unit/mcp/test_client.py -q`
+Run: `uv run pytest tests/unit/mcp/test_mcp_client.py -q`
 
 Expected: FAIL because `McpStdioClient` does not exist.
 
@@ -439,8 +439,8 @@ Use a bounded shielded cleanup helper after cancellation/failure.
 Run:
 
 ```powershell
-uv run pytest tests/unit/mcp/test_client.py -q
-uv run pyright src/mini_code_agent/mcp/client.py tests/unit/mcp/test_client.py
+uv run pytest tests/unit/mcp/test_mcp_client.py -q
+uv run pyright src/mini_code_agent/mcp/client.py tests/unit/mcp/test_mcp_client.py
 ```
 
 Expected: both pass.
@@ -448,7 +448,7 @@ Expected: both pass.
 - [x] **Step 6: Commit lifecycle ownership**
 
 ```powershell
-git add src/mini_code_agent/mcp/client.py tests/unit/mcp/test_client.py
+git add src/mini_code_agent/mcp/client.py tests/unit/mcp/test_mcp_client.py
 git commit -m "feat: govern MCP connection lifecycle"
 ```
 
@@ -456,7 +456,7 @@ git commit -m "feat: govern MCP connection lifecycle"
 
 **Files:**
 - Create: `src/mini_code_agent/mcp/tools.py`
-- Create: `tests/unit/mcp/test_tools.py`
+- Create: `tests/unit/mcp/test_mcp_tools.py`
 
 - [x] **Step 1: Write failing adapter tests**
 
@@ -481,7 +481,7 @@ limits, non-finite numbers, and remote `_meta` exclusion.
 
 - [x] **Step 3: Run tests and verify failure**
 
-Run: `uv run pytest tests/unit/mcp/test_tools.py -q`
+Run: `uv run pytest tests/unit/mcp/test_mcp_tools.py -q`
 
 Expected: FAIL because `McpTool` and normalizer are absent.
 
@@ -520,8 +520,8 @@ error envelopes. Never truncate an oversized or unsupported response into succes
 Run:
 
 ```powershell
-uv run pytest tests/unit/mcp/test_tools.py -q
-uv run pyright src/mini_code_agent/mcp/tools.py tests/unit/mcp/test_tools.py
+uv run pytest tests/unit/mcp/test_mcp_tools.py -q
+uv run pyright src/mini_code_agent/mcp/tools.py tests/unit/mcp/test_mcp_tools.py
 ```
 
 Expected: both pass.
@@ -529,7 +529,7 @@ Expected: both pass.
 - [x] **Step 6: Commit Tool adaptation**
 
 ```powershell
-git add src/mini_code_agent/mcp/tools.py tests/unit/mcp/test_tools.py
+git add src/mini_code_agent/mcp/tools.py tests/unit/mcp/test_mcp_tools.py
 git commit -m "feat: adapt bounded MCP tools"
 ```
 
@@ -684,7 +684,7 @@ git commit -m "test: prove governed MCP stdio execution"
 **Files:**
 - Review all source and test files changed by Tasks 1-7.
 
-- [ ] **Step 1: Run full branch coverage**
+- [x] **Step 1: Run full branch coverage**
 
 Run:
 
@@ -694,7 +694,7 @@ uv run pytest --cov=mini_code_agent --cov-branch --cov-report=term-missing
 
 Expected: all tests pass and total branch-aware coverage is at least 85%.
 
-- [ ] **Step 2: Run format, lint, type, security, and dependency gates**
+- [x] **Step 2: Run format, lint, type, security, and dependency gates**
 
 Run:
 
@@ -710,7 +710,7 @@ uv run pip-audit -r build/runtime-requirements.txt
 
 Expected: all commands pass with no vulnerabilities in the locked runtime graph.
 
-- [ ] **Step 3: Inspect dependency and trust-boundary diffs**
+- [x] **Step 3: Inspect dependency and trust-boundary diffs**
 
 Run:
 
@@ -724,7 +724,7 @@ rg -n "shell=True|create_subprocess_shell|os\\.system|subprocess\\.|instructions
 
 Expected: no shell launch, server-instruction injection, raw metadata return, or unbounded stderr.
 
-- [ ] **Step 4: Record focused hardening fixes**
+- [x] **Step 4: Record focused hardening fixes**
 
 For every issue found, first add a failing regression test, observe the expected failure, apply the
 smallest fix, rerun the focused test, and commit:

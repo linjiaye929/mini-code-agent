@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import stat
 import sys
 from pathlib import Path
 
@@ -11,6 +12,8 @@ from mini_code_agent.mcp.models import (
     MCP_PROTOCOL_VERSION,
     McpCallError,
     McpCallErrorCode,
+    McpConnectionError,
+    McpConnectionErrorCode,
     McpServerProfile,
     McpToolGrant,
 )
@@ -68,6 +71,21 @@ def test_stdio_parameters_use_exact_argv_cwd_and_explicit_secrets(tmp_path: Path
         encoding_error_handler="strict",
     )
     assert "secret-value" not in repr(profile)
+
+
+def test_stdio_parameters_revalidate_launch_paths(tmp_path: Path) -> None:
+    command = tmp_path / "server.exe"
+    command.write_bytes(b"placeholder")
+    command.chmod(command.stat().st_mode | stat.S_IXUSR)
+    payload = profile_for(tmp_path).model_dump()
+    payload["command"] = str(command)
+    profile = McpServerProfile.model_validate(payload)
+    command.unlink()
+
+    with pytest.raises(McpConnectionError) as caught:
+        build_stdio_parameters(profile)
+
+    assert caught.value.code is McpConnectionErrorCode.CONNECTION_FAILED
 
 
 def test_initialize_snapshot_keeps_only_contract_fields() -> None:
@@ -144,6 +162,23 @@ def test_tool_page_snapshot_discards_remote_prompt_metadata() -> None:
     assert "do-not-copy" not in serialized
 
 
+def test_tool_page_snapshot_rejects_global_tool_limit() -> None:
+    raw = types.ListToolsResult(
+        tools=[
+            types.Tool(
+                name=f"tool_{index}",
+                inputSchema={"type": "object"},
+            )
+            for index in range(129)
+        ]
+    )
+
+    with pytest.raises(McpConnectionError) as caught:
+        snapshot_tool_page(raw)
+
+    assert caught.value.code is McpConnectionErrorCode.TOOL_LISTING_TOO_LARGE
+
+
 def test_call_snapshot_keeps_text_and_structured_json_only() -> None:
     raw = types.CallToolResult(
         content=[
@@ -164,6 +199,24 @@ def test_call_snapshot_keeps_text_and_structured_json_only() -> None:
     assert snapshot.structured_content == {"clean": True}
     assert snapshot.is_error is False
     assert "secret" not in snapshot.model_dump_json()
+
+
+@pytest.mark.parametrize(
+    "content",
+    [
+        [types.TextContent(type="text", text="x") for _ in range(129)],
+        [types.TextContent(type="text", text="x" * 524_289)],
+    ],
+)
+def test_call_snapshot_rejects_global_text_limits(
+    content: list[types.ContentBlock],
+) -> None:
+    raw = types.CallToolResult(content=content)
+
+    with pytest.raises(McpCallError) as caught:
+        snapshot_call_result(raw)
+
+    assert caught.value.code is McpCallErrorCode.RESULT_TOO_LARGE
 
 
 def test_call_snapshot_rejects_non_text_content_without_partial_result() -> None:

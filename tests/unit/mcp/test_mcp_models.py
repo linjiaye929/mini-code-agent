@@ -176,6 +176,38 @@ def test_profile_requires_existing_absolute_unlinked_directory(tmp_path: Path) -
         McpServerProfile.model_validate(payload)
 
 
+def test_profile_requires_absolute_existing_unlinked_executable(
+    tmp_path: Path,
+) -> None:
+    payload = profile_for(tmp_path).model_dump()
+    payload["command"] = "python"
+    with pytest.raises(ValidationError):
+        McpServerProfile.model_validate(payload)
+
+    payload["command"] = str(tmp_path / "missing.exe")
+    with pytest.raises(ValidationError):
+        McpServerProfile.model_validate(payload)
+
+    payload["command"] = str(tmp_path)
+    with pytest.raises(ValidationError):
+        McpServerProfile.model_validate(payload)
+
+
+def test_profile_rejects_linked_executable_when_supported(
+    tmp_path: Path,
+) -> None:
+    linked = tmp_path / "linked-python.exe"
+    try:
+        linked.symlink_to(Path(sys.executable))
+    except OSError as exc:
+        pytest.skip(f"Executable symlink unavailable in this environment: {exc}")
+
+    payload = profile_for(tmp_path).model_dump()
+    payload["command"] = str(linked)
+    with pytest.raises(ValidationError):
+        McpServerProfile.model_validate(payload)
+
+
 def test_profile_rejects_linked_working_directory_when_supported(tmp_path: Path) -> None:
     target = tmp_path / "target"
     target.mkdir()

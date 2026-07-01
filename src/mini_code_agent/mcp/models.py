@@ -118,6 +118,12 @@ class McpServerProfile(BaseModel):
             raise ValueError("MCP profile text cannot contain NUL.")
         return value
 
+    @field_validator("command")
+    @classmethod
+    def require_safe_executable(cls, value: str) -> str:
+        _require_safe_regular_file(Path(value), label="executable")
+        return value
+
     @field_validator("args")
     @classmethod
     def reject_nul_arguments(cls, value: tuple[str, ...]) -> tuple[str, ...]:
@@ -128,20 +134,7 @@ class McpServerProfile(BaseModel):
     @field_validator("cwd")
     @classmethod
     def require_safe_working_directory(cls, value: Path) -> Path:
-        if not value.is_absolute():
-            raise ValueError("MCP working directory must be absolute.")
-        try:
-            status = value.lstat()
-        except OSError:
-            raise ValueError("MCP working directory is unavailable.") from None
-        file_attributes = getattr(status, "st_file_attributes", 0)
-        reparse_flag = getattr(stat, "FILE_ATTRIBUTE_REPARSE_POINT", 0x400)
-        if (
-            value.is_symlink()
-            or bool(file_attributes & reparse_flag)
-            or not stat.S_ISDIR(status.st_mode)
-        ):
-            raise ValueError("MCP working directory must be an unlinked directory.")
+        _require_safe_directory(value)
         return value
 
     @field_validator("environment")
@@ -186,6 +179,10 @@ class McpServerProfile(BaseModel):
             cwd=os.fspath(self.cwd),
             environment_keys=tuple(sorted(self.environment)),
         )
+
+    def revalidate_launch_paths(self) -> None:
+        _require_safe_regular_file(Path(self.command), label="executable")
+        _require_safe_directory(self.cwd)
 
 
 class McpInitializeSnapshot(BaseModel):
@@ -345,3 +342,36 @@ class McpCallError(RuntimeError):
     def __init__(self, code: McpCallErrorCode) -> None:
         self.code = code
         super().__init__(_CALL_MESSAGES[code])
+
+
+def _is_reparse_point(status: os.stat_result) -> bool:
+    file_attributes = getattr(status, "st_file_attributes", 0)
+    reparse_flag = getattr(stat, "FILE_ATTRIBUTE_REPARSE_POINT", 0x400)
+    return bool(file_attributes & reparse_flag)
+
+
+def _require_safe_regular_file(path: Path, *, label: str) -> None:
+    if not path.is_absolute():
+        raise ValueError(f"MCP {label} path must be absolute.")
+    try:
+        status = path.lstat()
+    except OSError:
+        raise ValueError(f"MCP {label} is unavailable.") from None
+    if (
+        path.is_symlink()
+        or _is_reparse_point(status)
+        or not stat.S_ISREG(status.st_mode)
+        or not os.access(path, os.X_OK)
+    ):
+        raise ValueError(f"MCP {label} must be an executable unlinked regular file.")
+
+
+def _require_safe_directory(path: Path) -> None:
+    if not path.is_absolute():
+        raise ValueError("MCP working directory must be absolute.")
+    try:
+        status = path.lstat()
+    except OSError:
+        raise ValueError("MCP working directory is unavailable.") from None
+    if path.is_symlink() or _is_reparse_point(status) or not stat.S_ISDIR(status.st_mode):
+        raise ValueError("MCP working directory must be an unlinked directory.")

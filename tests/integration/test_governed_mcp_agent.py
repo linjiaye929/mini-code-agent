@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import asyncio
 import json
 import sys
 from pathlib import Path
@@ -171,6 +172,21 @@ async def test_real_stdio_tool_runs_through_governed_agent(
         "name": "status",
         "path": ".",
     }
+
+
+@pytest.mark.asyncio
+async def test_official_session_can_close_from_a_different_task(
+    tmp_path: Path,
+) -> None:
+    client = McpStdioClient(
+        profile_for(tmp_path),
+        approver=RecordingConnectionApprover(),
+    )
+    await client.connect()
+
+    await asyncio.create_task(client.aclose())
+
+    assert client.state is McpLifecycleState.CLOSED
 
 
 @pytest.mark.asyncio

@@ -1,8 +1,9 @@
 from __future__ import annotations
 
+import asyncio
 import os
 from collections.abc import Mapping
-from contextlib import AsyncExitStack
+from contextlib import AsyncExitStack, suppress
 from datetime import timedelta
 from typing import Protocol, cast
 
@@ -24,6 +25,10 @@ from mini_code_agent.mcp.models import (
     McpToolPage,
 )
 
+_MAX_SNAPSHOT_TOOLS = 128
+_MAX_SNAPSHOT_TEXT_BLOCKS = 128
+_MAX_SNAPSHOT_TEXT_CHARS = 524_288
+
 
 class McpSession(Protocol):
     async def initialize(self) -> McpInitializeSnapshot: ...
@@ -44,6 +49,10 @@ class McpSessionFactory(Protocol):
 
 
 def build_stdio_parameters(profile: McpServerProfile) -> StdioServerParameters:
+    try:
+        profile.revalidate_launch_paths()
+    except ValueError:
+        raise McpConnectionError(McpConnectionErrorCode.CONNECTION_FAILED) from None
     return StdioServerParameters(
         command=profile.command,
         args=list(profile.args),
@@ -73,6 +82,8 @@ def snapshot_initialize_result(
 
 
 def snapshot_tool_page(result: types.ListToolsResult) -> McpToolPage:
+    if len(result.tools) > _MAX_SNAPSHOT_TOOLS:
+        raise McpConnectionError(McpConnectionErrorCode.TOOL_LISTING_TOO_LARGE)
     try:
         return McpToolPage(
             tools=tuple(
@@ -97,10 +108,16 @@ def snapshot_tool_page(result: types.ListToolsResult) -> McpToolPage:
 
 
 def snapshot_call_result(result: types.CallToolResult) -> McpCallResult:
+    if len(result.content) > _MAX_SNAPSHOT_TEXT_BLOCKS:
+        raise McpCallError(McpCallErrorCode.RESULT_TOO_LARGE)
     text: list[str] = []
+    text_chars = 0
     for block in result.content:
         if not isinstance(block, types.TextContent):
             raise McpCallError(McpCallErrorCode.RESULT_UNSUPPORTED)
+        text_chars += len(block.text)
+        if text_chars > _MAX_SNAPSHOT_TEXT_CHARS:
+            raise McpCallError(McpCallErrorCode.RESULT_TOO_LARGE)
         text.append(block.text)
     try:
         return McpCallResult.model_validate(
@@ -116,55 +133,89 @@ def snapshot_call_result(result: types.CallToolResult) -> McpCallResult:
 
 class OfficialStdioSessionFactory:
     async def open(self, profile: McpServerProfile) -> McpSession:
-        stack = AsyncExitStack()
+        ready = asyncio.get_running_loop().create_future()
+        close_event = asyncio.Event()
+        worker = asyncio.create_task(
+            _own_stdio_session(profile, ready, close_event),
+            name=f"mcp-stdio-{profile.server_id}",
+        )
         try:
-            errlog = stack.enter_context(
-                open(os.devnull, "w", encoding="utf-8"),  # noqa: SIM115
-            )
-            read_stream, write_stream = await stack.enter_async_context(
-                stdio_client(
-                    build_stdio_parameters(profile),
-                    errlog=errlog,
-                )
-            )
-            session = await stack.enter_async_context(
-                ClientSession(
-                    read_stream,
-                    write_stream,
-                    read_timeout_seconds=timedelta(seconds=profile.limits.call_timeout_seconds),
-                    client_info=types.Implementation(
-                        name="mini-code-agent",
-                        version=__version__,
-                    ),
-                )
-            )
+            session = await ready
         except BaseException:
-            await stack.aclose()
+            if not ready.done():
+                ready.cancel()
+            close_event.set()
+            worker.cancel()
+            with suppress(BaseException):
+                await worker
             raise
         return _OfficialStdioSession(
-            stack,
+            worker,
+            close_event,
             session,
             call_timeout_seconds=profile.limits.call_timeout_seconds,
         )
 
 
+async def _own_stdio_session(
+    profile: McpServerProfile,
+    ready: asyncio.Future[ClientSession],
+    close_event: asyncio.Event,
+) -> None:
+    stack = AsyncExitStack()
+    try:
+        errlog = stack.enter_context(
+            open(os.devnull, "w", encoding="utf-8"),  # noqa: SIM115
+        )
+        read_stream, write_stream = await stack.enter_async_context(
+            stdio_client(
+                build_stdio_parameters(profile),
+                errlog=errlog,
+            )
+        )
+        session = await stack.enter_async_context(
+            ClientSession(
+                read_stream,
+                write_stream,
+                read_timeout_seconds=timedelta(seconds=profile.limits.call_timeout_seconds),
+                client_info=types.Implementation(
+                    name="mini-code-agent",
+                    version=__version__,
+                ),
+            )
+        )
+        if not ready.done():
+            ready.set_result(session)
+        await close_event.wait()
+    except BaseException as exc:
+        if not ready.done():
+            ready.set_exception(exc)
+        raise
+    finally:
+        await stack.aclose()
+
+
 class _OfficialStdioSession:
     def __init__(
         self,
-        stack: AsyncExitStack,
+        worker: asyncio.Task[None],
+        close_event: asyncio.Event,
         session: ClientSession,
         *,
         call_timeout_seconds: float,
     ) -> None:
-        self._stack = stack
+        self._worker = worker
+        self._close_event = close_event
         self._session = session
         self._call_timeout = timedelta(seconds=call_timeout_seconds)
         self._closed = False
 
     async def initialize(self) -> McpInitializeSnapshot:
+        self._require_open()
         return snapshot_initialize_result(await self._session.initialize())
 
     async def list_tools(self) -> McpToolPage:
+        self._require_open()
         return snapshot_tool_page(await self._session.list_tools())
 
     async def call_tool(
@@ -172,6 +223,7 @@ class _OfficialStdioSession:
         name: str,
         arguments: Mapping[str, JsonValue],
     ) -> McpCallResult:
+        self._require_open()
         frozen = cast(Mapping[str, FrozenJsonValue], arguments)
         result = await self._session.call_tool(
             name,
@@ -181,7 +233,10 @@ class _OfficialStdioSession:
         return snapshot_call_result(result)
 
     async def aclose(self) -> None:
-        if self._closed:
-            return
         self._closed = True
-        await self._stack.aclose()
+        self._close_event.set()
+        await asyncio.shield(self._worker)
+
+    def _require_open(self) -> None:
+        if self._closed or self._worker.done():
+            raise McpCallError(McpCallErrorCode.NOT_CONNECTED)
