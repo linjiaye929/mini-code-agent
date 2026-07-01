@@ -431,7 +431,7 @@ git commit -m "feat: validate subagent capabilities and evidence"
 - Create: `tests/unit/subagents/test_events.py`
 - Create: `tests/unit/subagents/test_supervisor.py`
 
-- [ ] **Step 1: Write failing event tests**
+- [x] **Step 1: Write failing event tests**
 
 Require immutable bounded events:
 
@@ -472,7 +472,7 @@ def test_subagent_events_omit_task_prompt_summary_and_results() -> None:
 Round-trip all four event types through `TypeAdapter[SubagentEvent]`; reject IDs, durations, counts,
 and hashes over bounds; prove sink exceptions do not alter execution.
 
-- [ ] **Step 2: Write failing one-child supervisor tests**
+- [x] **Step 2: Write failing one-child supervisor tests**
 
 Use injected deterministic ID and monotonic factories:
 
@@ -508,19 +508,19 @@ async def test_one_child_gets_fresh_context_exact_tools_and_bounded_result(
 Also test a non-completed `StopReason`, provider factory error, Tool factory error, duplicate object
 identity, malformed AgentResult, and event order.
 
-- [ ] **Step 3: Run tests and observe red**
+- [x] **Step 3: Run tests and observe red**
 
 ```powershell
 py -m uv run pytest tests/unit/subagents/test_events.py tests/unit/subagents/test_supervisor.py -q
 ```
 
-- [ ] **Step 4: Implement Subagent events**
+- [x] **Step 4: Implement Subagent events**
 
 Keep the union separate from `AgentEvent` because parent run/turn context is unavailable at the Tool
 boundary. Add `NullSubagentEventSink` and `RecordingSubagentEventSink`. Publishing catches ordinary
 sink exceptions; cancellation is not involved because publishing is synchronous.
 
-- [ ] **Step 5: Implement child preparation and execution**
+- [x] **Step 5: Implement child preparation and execution**
 
 `SubagentSupervisor.__init__` snapshots profile/factories/root and validates the root. Before any
 Provider call, `_prepare_children()` creates all providers/executors, rejects reused object IDs,
@@ -540,7 +540,7 @@ result = await runtime.run(
 Map completed, stopped, timed-out, and failed paths to static result models. Truncate summaries by
 profile character limit before hashing. Never copy `AgentResult.messages` into a public model.
 
-- [ ] **Step 6: Run focused and static checks**
+- [x] **Step 6: Run focused and static checks**
 
 ```powershell
 py -m uv run pytest tests/unit/subagents/test_events.py tests/unit/subagents/test_supervisor.py -q
@@ -548,7 +548,7 @@ py -m uv run ruff check src/mini_code_agent/subagents tests/unit/subagents
 py -m uv run pyright src/mini_code_agent/subagents tests/unit/subagents
 ```
 
-- [ ] **Step 7: Commit the one-child lifecycle**
+- [x] **Step 7: Commit the one-child lifecycle**
 
 ```powershell
 git add src/mini_code_agent/subagents/events.py src/mini_code_agent/subagents/supervisor.py tests/unit/subagents/test_events.py tests/unit/subagents/test_supervisor.py
