@@ -1,6 +1,8 @@
 from __future__ import annotations
 
+import asyncio
 from collections import deque
+from collections.abc import AsyncIterator, Callable
 from pathlib import Path
 
 import pytest
@@ -12,7 +14,15 @@ from mini_code_agent.policy.approval import StaticApprovalHandler
 from mini_code_agent.policy.engine import PolicyEngine
 from mini_code_agent.policy.executor import GovernedToolExecutor
 from mini_code_agent.policy.models import SessionMode, TrustSource
-from mini_code_agent.providers.base import FinishReason, ModelProvider, ModelResponse
+from mini_code_agent.providers.base import (
+    FinishReason,
+    ModelProvider,
+    ModelRequest,
+    ModelResponse,
+    ProviderCapabilities,
+    ProviderStreamEvent,
+    ResponseCompleted,
+)
 from mini_code_agent.providers.fake import ScriptedProvider
 from mini_code_agent.subagents.contracts import SubagentCompositionError
 from mini_code_agent.subagents.events import (
@@ -23,6 +33,7 @@ from mini_code_agent.subagents.events import (
     SubagentStarted,
 )
 from mini_code_agent.subagents.models import (
+    SubagentBatchResult,
     SubagentLimits,
     SubagentProfile,
     SubagentStatus,
@@ -121,6 +132,66 @@ class ToolFactory:
         return self.tools.popleft()
 
 
+class ConcurrencyGate:
+    def __init__(self, expected: int, *, auto_release: bool = True) -> None:
+        self.expected = expected
+        self.auto_release = auto_release
+        self.entered = 0
+        self.active = 0
+        self.peak = 0
+        self.cancelled = 0
+        self.reached = asyncio.Event()
+        self.release = asyncio.Event()
+
+    async def wait(self) -> None:
+        self.entered += 1
+        self.active += 1
+        self.peak = max(self.peak, self.active)
+        if self.entered >= self.expected:
+            self.reached.set()
+            if self.auto_release:
+                self.release.set()
+        try:
+            await self.release.wait()
+        except asyncio.CancelledError:
+            self.cancelled += 1
+            raise
+        finally:
+            self.active -= 1
+
+
+class GatedProvider:
+    def __init__(
+        self,
+        gate: ConcurrencyGate,
+        *,
+        result: str,
+        delay_after_gate: float = 0,
+    ) -> None:
+        self._gate = gate
+        self._result = result
+        self._delay_after_gate = delay_after_gate
+        self.requests: list[ModelRequest] = []
+        self._capabilities = ProviderCapabilities()
+
+    @property
+    def capabilities(self) -> ProviderCapabilities:
+        return self._capabilities
+
+    async def complete(self, request: ModelRequest) -> ModelResponse:
+        self.requests.append(request)
+        await self._gate.wait()
+        if self._delay_after_gate:
+            await asyncio.sleep(self._delay_after_gate)
+        return final_response(self._result)
+
+    async def stream(
+        self,
+        request: ModelRequest,
+    ) -> AsyncIterator[ProviderStreamEvent]:
+        yield ResponseCompleted(response=await self.complete(request))
+
+
 def profile_for(**limit_changes: object) -> SubagentProfile:
     limits: dict[str, object] = {
         "max_tasks": 4,
@@ -154,6 +225,7 @@ def supervisor_for(
     events: RecordingSubagentEventSink | None = None,
     child_ids: tuple[str, ...] = ("child-1",),
     profile: SubagentProfile | None = None,
+    monotonic: Callable[[], float] | None = None,
 ) -> tuple[SubagentSupervisor, ProviderFactory, ToolFactory]:
     provider_factory = ProviderFactory(providers)
     tool_factory = ToolFactory(
@@ -167,6 +239,7 @@ def supervisor_for(
         tool_factory=tool_factory,
         events=events,
         id_factory=lambda: next(ids),
+        monotonic=monotonic or (lambda: 1.0),
     )
     return supervisor, provider_factory, tool_factory
 
@@ -325,3 +398,219 @@ def test_supervisor_rejects_invalid_workspace_root(tmp_path: Path) -> None:
             provider_factory=ProviderFactory(()),
             tool_factory=ToolFactory(()),
         )
+
+
+@pytest.mark.asyncio
+async def test_batch_runs_children_concurrently_and_preserves_input_order(
+    tmp_path: Path,
+) -> None:
+    gate = ConcurrencyGate(expected=2)
+    providers: tuple[ModelProvider, ...] = (
+        GatedProvider(gate, result="first", delay_after_gate=0.05),
+        GatedProvider(gate, result="second"),
+    )
+    supervisor, _, _ = supervisor_for(
+        tmp_path,
+        providers=providers,
+        child_ids=("child-1", "child-2"),
+    )
+
+    result = await supervisor.run_batch(
+        parent_tool_call_id="parent-1",
+        tasks=("slow first", "fast second"),
+    )
+
+    assert gate.peak == 2
+    assert [child.untrusted_summary for child in result.children] == [
+        "first",
+        "second",
+    ]
+    assert gate.active == 0
+
+
+@pytest.mark.asyncio
+async def test_child_timeout_does_not_cancel_completed_sibling(
+    tmp_path: Path,
+) -> None:
+    providers: tuple[ModelProvider, ...] = (
+        ScriptedProvider((final_response("late"),), delay_seconds=0.2),
+        ScriptedProvider((final_response("done"),)),
+    )
+    supervisor, _, _ = supervisor_for(
+        tmp_path,
+        providers=providers,
+        child_ids=("child-1", "child-2"),
+        profile=profile_for(
+            child_timeout_seconds=0.05,
+            batch_timeout_seconds=0.3,
+        ),
+    )
+
+    result = await supervisor.run_batch(
+        parent_tool_call_id="parent-1",
+        tasks=("slow", "fast"),
+    )
+
+    assert [child.status for child in result.children] == [
+        SubagentStatus.TIMED_OUT,
+        SubagentStatus.COMPLETED,
+    ]
+    assert result.timed_out == 1
+    assert result.completed == 1
+
+
+@pytest.mark.asyncio
+async def test_ordinary_child_projection_failure_does_not_cancel_sibling(
+    tmp_path: Path,
+) -> None:
+    providers: tuple[ModelProvider, ...] = (
+        ScriptedProvider((final_response("invalid\0summary"),)),
+        ScriptedProvider((final_response("done"),)),
+    )
+    supervisor, _, _ = supervisor_for(
+        tmp_path,
+        providers=providers,
+        child_ids=("child-1", "child-2"),
+    )
+
+    result = await supervisor.run_batch(
+        parent_tool_call_id="parent-1",
+        tasks=("invalid", "valid"),
+    )
+
+    assert [child.status for child in result.children] == [
+        SubagentStatus.FAILED,
+        SubagentStatus.COMPLETED,
+    ]
+    assert result.failed == 1
+    assert result.completed == 1
+
+
+@pytest.mark.asyncio
+async def test_max_concurrency_one_never_overlaps_children(
+    tmp_path: Path,
+) -> None:
+    gate = ConcurrencyGate(expected=1)
+    providers: tuple[ModelProvider, ...] = (
+        GatedProvider(gate, result="first"),
+        GatedProvider(gate, result="second"),
+    )
+    supervisor, _, _ = supervisor_for(
+        tmp_path,
+        providers=providers,
+        child_ids=("child-1", "child-2"),
+        profile=profile_for(max_concurrency=1),
+    )
+
+    result = await supervisor.run_batch(
+        parent_tool_call_id="parent-1",
+        tasks=("first", "second"),
+    )
+
+    assert result.completed == 2
+    assert gate.peak == 1
+    assert gate.active == 0
+
+
+@pytest.mark.asyncio
+async def test_batch_timeout_marks_every_unfinished_ordinal(
+    tmp_path: Path,
+) -> None:
+    gate = ConcurrencyGate(expected=2, auto_release=False)
+    providers: tuple[ModelProvider, ...] = (
+        GatedProvider(gate, result="first"),
+        GatedProvider(gate, result="second"),
+        ScriptedProvider((final_response("never started"),)),
+    )
+    supervisor, _, _ = supervisor_for(
+        tmp_path,
+        providers=providers,
+        child_ids=("child-1", "child-2", "child-3"),
+        profile=profile_for(
+            max_concurrency=2,
+            child_timeout_seconds=0.08,
+            batch_timeout_seconds=0.08,
+        ),
+    )
+
+    result = await supervisor.run_batch(
+        parent_tool_call_id="parent-1",
+        tasks=("first", "second", "waiting"),
+    )
+
+    assert [child.ordinal for child in result.children] == [0, 1, 2]
+    assert all(
+        child.status is SubagentStatus.BATCH_TIMED_OUT
+        for child in result.children
+    )
+    assert result.timed_out == 3
+    assert gate.cancelled == 2
+    assert gate.active == 0
+
+
+@pytest.mark.asyncio
+async def test_external_cancellation_cancels_children_and_is_re_raised(
+    tmp_path: Path,
+) -> None:
+    gate = ConcurrencyGate(expected=2, auto_release=False)
+    providers: tuple[ModelProvider, ...] = (
+        GatedProvider(gate, result="first"),
+        GatedProvider(gate, result="second"),
+    )
+    supervisor, _, _ = supervisor_for(
+        tmp_path,
+        providers=providers,
+        child_ids=("child-1", "child-2"),
+    )
+    run = asyncio.create_task(
+        supervisor.run_batch(
+            parent_tool_call_id="parent-1",
+            tasks=("first", "second"),
+        )
+    )
+    await asyncio.wait_for(gate.reached.wait(), timeout=1)
+
+    run.cancel()
+
+    with pytest.raises(asyncio.CancelledError):
+        await run
+    await asyncio.sleep(0)
+    assert gate.cancelled == 2
+    assert gate.active == 0
+
+
+@pytest.mark.asyncio
+async def test_mixed_batch_counts_and_hash_are_deterministic(
+    tmp_path: Path,
+) -> None:
+    async def run_once() -> SubagentBatchResult:
+        providers: tuple[ModelProvider, ...] = (
+            ScriptedProvider((final_response("late"),), delay_seconds=0.05),
+            ScriptedProvider((final_response("invalid\0summary"),)),
+            ScriptedProvider((final_response("done"),)),
+        )
+        supervisor, _, _ = supervisor_for(
+            tmp_path,
+            providers=providers,
+            child_ids=("child-1", "child-2", "child-3"),
+            profile=profile_for(
+                max_concurrency=3,
+                child_timeout_seconds=0.01,
+                batch_timeout_seconds=0.2,
+            ),
+        )
+        return await supervisor.run_batch(
+            parent_tool_call_id="parent-1",
+            tasks=("timeout", "fail", "complete"),
+        )
+
+    first = await run_once()
+    second = await run_once()
+
+    assert (first.completed, first.failed, first.timed_out, first.stopped) == (
+        1,
+        1,
+        1,
+        0,
+    )
+    assert first == second

@@ -561,7 +561,7 @@ git commit -m "feat: run isolated subagent lifecycles"
 - Modify: `src/mini_code_agent/subagents/supervisor.py`
 - Modify: `tests/unit/subagents/test_supervisor.py`
 
-- [ ] **Step 1: Write failing concurrency tests**
+- [x] **Step 1: Write failing concurrency tests**
 
 Add deterministic gate providers:
 
@@ -599,13 +599,13 @@ Add:
 - no pending task remains after completion/cancellation;
 - completed/timed-out/failed counts and batch hash are deterministic.
 
-- [ ] **Step 2: Run concurrency tests and observe red**
+- [x] **Step 2: Run concurrency tests and observe red**
 
 ```powershell
 py -m uv run pytest tests/unit/subagents/test_supervisor.py -q -k "concurrent or timeout or cancel"
 ```
 
-- [ ] **Step 3: Implement TaskGroup fan-out/fan-in**
+- [x] **Step 3: Implement TaskGroup fan-out/fan-in**
 
 Use one result slot per input ordinal and one semaphore:
 
@@ -631,7 +631,7 @@ except TimeoutError:
 `_run_child()` wraps only its own timeout and ordinary failures. It must always re-raise
 `CancelledError`. External cancellation must not be converted into batch timeout.
 
-- [ ] **Step 4: Verify focused and complete Subagent tests**
+- [x] **Step 4: Verify focused and complete Subagent tests**
 
 ```powershell
 py -m uv run pytest tests/unit/subagents -q
@@ -639,7 +639,7 @@ py -m uv run ruff check src/mini_code_agent/subagents tests/unit/subagents
 py -m uv run pyright src/mini_code_agent/subagents tests/unit/subagents
 ```
 
-- [ ] **Step 5: Commit structured concurrency**
+- [x] **Step 5: Commit structured concurrency**
 
 ```powershell
 git add src/mini_code_agent/subagents/supervisor.py tests/unit/subagents/test_supervisor.py

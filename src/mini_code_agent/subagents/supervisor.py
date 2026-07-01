@@ -102,16 +102,43 @@ class SubagentSupervisor:
                 task_count=len(tasks),
             )
         )
-        results = tuple(
-            [
-                await self._run_child(
-                    parent_tool_call_id=parent_tool_call_id,
-                    child=child,
+        result_slots: list[SubagentChildResult | None] = [None] * len(children)
+        semaphore = asyncio.Semaphore(self._profile.limits.max_concurrency)
+
+        async def run_at(child: _PreparedChild) -> None:
+            result_slots[child.ordinal] = await self._run_child(
+                parent_tool_call_id=parent_tool_call_id,
+                child=child,
+                semaphore=semaphore,
+            )
+
+        try:
+            async with asyncio.timeout(self._profile.limits.batch_timeout_seconds):
+                async with asyncio.TaskGroup() as group:
+                    for child in children:
+                        group.create_task(run_at(child))
+        except TimeoutError:
+            duration_ms = _elapsed_ms(started_at, self._monotonic())
+            for child in children:
+                if result_slots[child.ordinal] is not None:
+                    continue
+                result = self._error_result(
+                    child,
+                    status=SubagentStatus.BATCH_TIMED_OUT,
+                    code=SubagentErrorCode.BATCH_TIMEOUT,
+                    message="Subagent batch timed out.",
                 )
-                for child in children
-            ]
-        )
+                result_slots[child.ordinal] = result
+                self._publish_child_completed(
+                    parent_tool_call_id=parent_tool_call_id,
+                    result=result,
+                    duration_ms=duration_ms,
+                )
+
         duration_ms = _elapsed_ms(started_at, self._monotonic())
+        if any(result is None for result in result_slots):
+            raise RuntimeError("Subagent result slot was not populated.")
+        results = cast(tuple[SubagentChildResult, ...], tuple(result_slots))
         batch = SubagentBatchResult.from_children(
             profile_id=self._profile.profile_id,
             children=results,
@@ -176,6 +203,7 @@ class SubagentSupervisor:
         *,
         parent_tool_call_id: str,
         child: _PreparedChild,
+        semaphore: asyncio.Semaphore,
     ) -> SubagentChildResult:
         started_at = self._monotonic()
         self._publish(
@@ -187,15 +215,16 @@ class SubagentSupervisor:
             )
         )
         try:
-            async with asyncio.timeout(self._profile.limits.child_timeout_seconds):
-                candidate = cast(
-                    object,
-                    await child.runtime.run(
-                        user_prompt=child.task,
-                        system_prompt=self._profile.system_prompt,
-                        run_id=_runtime_id(child.child_id),
-                    ),
-                )
+            async with semaphore:
+                async with asyncio.timeout(self._profile.limits.child_timeout_seconds):
+                    candidate = cast(
+                        object,
+                        await child.runtime.run(
+                            user_prompt=child.task,
+                            system_prompt=self._profile.system_prompt,
+                            run_id=_runtime_id(child.child_id),
+                        ),
+                    )
             if not isinstance(candidate, AgentResult):
                 raise TypeError("invalid Agent result")
             result = self._project_agent_result(child, candidate)
@@ -216,12 +245,26 @@ class SubagentSupervisor:
                 message=_CHILD_FAILED_MESSAGE,
             )
         duration_ms = _elapsed_ms(started_at, self._monotonic())
+        self._publish_child_completed(
+            parent_tool_call_id=parent_tool_call_id,
+            result=result,
+            duration_ms=duration_ms,
+        )
+        return result
+
+    def _publish_child_completed(
+        self,
+        *,
+        parent_tool_call_id: str,
+        result: SubagentChildResult,
+        duration_ms: int,
+    ) -> None:
         self._publish(
             SubagentCompleted(
                 parent_tool_call_id=parent_tool_call_id,
                 profile_id=self._profile.profile_id,
-                child_id=child.child_id,
-                ordinal=child.ordinal,
+                child_id=result.child_id,
+                ordinal=result.ordinal,
                 status=result.status,
                 duration_ms=duration_ms,
                 turns=result.turns,
@@ -230,7 +273,6 @@ class SubagentSupervisor:
                 result_sha256=result.result_sha256,
             )
         )
-        return result
 
     def _project_agent_result(
         self,
