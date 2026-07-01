@@ -62,7 +62,7 @@ JSON Schema Draft 2020-12, asyncio/AnyIO stdio lifecycle, Pytest, Ruff, strict P
 - Create: `tests/unit/mcp/helpers.py`
 - Create: `tests/unit/mcp/test_models.py`
 
-- [ ] **Step 1: Add and lock the stable SDK**
+- [x] **Step 1: Add and lock the stable SDK**
 
 Add this runtime dependency without a CLI extra:
 
@@ -79,7 +79,7 @@ uv tree --depth 1
 
 Expected: resolution selects MCP `1.x`, never `2.x`.
 
-- [ ] **Step 2: Write failing model tests**
+- [x] **Step 2: Write failing model tests**
 
 Cover immutable grants, exact aliases, duplicate remote/local names, bounded argv, NUL rejection,
 absolute existing non-link cwd, secret masking, environment key validation, supported protocol,
@@ -106,13 +106,13 @@ def test_profile_rejects_duplicate_remote_and_local_tool_names(tmp_path: Path) -
         profile_for(tmp_path, grants=(first, duplicate))
 ```
 
-- [ ] **Step 3: Run tests and verify collection fails**
+- [x] **Step 3: Run tests and verify collection fails**
 
 Run: `uv run pytest tests/unit/mcp/test_models.py -q`
 
 Expected: FAIL because `mini_code_agent.mcp.models` does not exist.
 
-- [ ] **Step 4: Implement exact immutable models**
+- [x] **Step 4: Implement exact immutable models**
 
 Implement:
 
@@ -169,7 +169,7 @@ Add exact `McpServerProfile`, approval request, initialize/tool/page/call snapsh
 `McpConnectionErrorCode`, `McpConnectionError`, and `McpCallError`. Freeze environment mappings
 and grant tuples. `approval_request()` returns names, never secret values.
 
-- [ ] **Step 5: Run model and static tests**
+- [x] **Step 5: Run model and static tests**
 
 Run:
 
@@ -180,7 +180,7 @@ uv run pyright src/mini_code_agent/mcp/models.py tests/unit/mcp
 
 Expected: both pass.
 
-- [ ] **Step 6: Commit contracts**
+- [x] **Step 6: Commit contracts**
 
 ```powershell
 git add pyproject.toml uv.lock src/mini_code_agent/mcp/models.py tests/unit/mcp
