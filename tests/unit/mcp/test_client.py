@@ -132,6 +132,7 @@ class FakeSession:
         call_delay: float = 0,
         close_delay: float = 0,
         call_error: Exception | None = None,
+        require_same_task_close: bool = False,
     ) -> None:
         self._events = events
         self._initialized = initialized or valid_initialized()
@@ -141,6 +142,8 @@ class FakeSession:
         self._call_delay = call_delay
         self._close_delay = close_delay
         self._call_error = call_error
+        self._require_same_task_close = require_same_task_close
+        self._owner_task: asyncio.Task[object] | None = None
         self.close_count = 0
         self.call_count = 0
         self.active_calls = 0
@@ -148,6 +151,7 @@ class FakeSession:
 
     async def initialize(self) -> McpInitializeSnapshot:
         self._events.append("initialize")
+        self._owner_task = asyncio.current_task()
         if self._initialize_delay:
             await asyncio.sleep(self._initialize_delay)
         return self._initialized
@@ -180,6 +184,8 @@ class FakeSession:
     async def aclose(self) -> None:
         self._events.append("close")
         self.close_count += 1
+        if self._require_same_task_close and asyncio.current_task() is not self._owner_task:
+            raise RuntimeError("Session closed from a different task.")
         if self._close_delay:
             await asyncio.sleep(self._close_delay)
 
@@ -351,6 +357,23 @@ async def test_connect_is_single_use_and_close_is_idempotent(tmp_path: Path) -> 
     await client.aclose()
     await client.aclose()
 
+    assert session.close_count == 1
+
+
+@pytest.mark.asyncio
+async def test_session_closes_in_the_task_that_opened_it(tmp_path: Path) -> None:
+    events: list[str] = []
+    session = FakeSession(events, require_same_task_close=True)
+    client = McpStdioClient(
+        profile_for(tmp_path),
+        approver=RecordingApprover(events),
+        factory=RecordingFactory(events, session),
+    )
+    await client.connect()
+
+    await client.aclose()
+
+    assert client.state is McpLifecycleState.CLOSED
     assert session.close_count == 1
 
 

@@ -2,7 +2,6 @@ from __future__ import annotations
 
 import asyncio
 from collections.abc import Mapping
-from contextlib import suppress
 from typing import Self
 
 from pydantic import JsonValue
@@ -184,19 +183,12 @@ class McpStdioClient:
         if session is None:
             return True
 
-        close_task = asyncio.create_task(session.aclose())
         try:
             async with asyncio.timeout(self._profile.limits.close_timeout_seconds):
-                await asyncio.shield(close_task)
+                await session.aclose()
         except TimeoutError:
-            close_task.cancel()
-            with suppress(BaseException):
-                await close_task
             return False
         except asyncio.CancelledError:
-            close_task.cancel()
-            with suppress(BaseException):
-                await close_task
             raise
         except Exception:
             return False
