@@ -30,11 +30,11 @@
 - Test: `tests/unit/worktrees/test_models.py`
 - Test: `tests/unit/subagents/test_models.py`
 
-- [ ] Write failing tests for hard ceilings, absolute/existing path requirements, literal allowed-prefix normalization, exact implementation profile mode, canonical identifiers, immutable records, and invalid limit relationships.
-- [ ] Extend `SubagentProfile.mode` to support `implementation` without weakening analysis-profile validation.
-- [ ] Implement `WorktreeLimits`, `WorktreeProfile`, repository/base/index records, lease states, ledger records, candidate states, candidate file records, and public error codes.
-- [ ] Ensure canonical manifests exclude mutable state fields and reject duplicate/case-colliding paths.
-- [ ] Run:
+- [x] Write failing tests for hard ceilings, absolute/existing path requirements, literal allowed-prefix normalization, exact implementation profile mode, canonical identifiers, immutable records, and invalid limit relationships.
+- [x] Extend `SubagentProfile.mode` to support `implementation` without weakening analysis-profile validation.
+- [x] Implement `WorktreeLimits`, `WorktreeProfile`, repository/base/index records, lease states, ledger records, candidate states, candidate file records, and public error codes.
+- [x] Ensure canonical manifests exclude mutable state fields and reject duplicate/case-colliding paths.
+- [x] Run:
 
 ```powershell
 py -m uv run --no-sync pytest tests/unit/worktrees/test_models.py tests/unit/subagents/test_models.py -q
@@ -42,7 +42,7 @@ py -m uv run --no-sync ruff check src/mini_code_agent/worktrees src/mini_code_ag
 py -m uv run --no-sync pyright
 ```
 
-- [ ] Commit: `feat: define governed worktree contracts`
+- [x] Commit: `feat: define governed worktree contracts`
 
 ## Task 2: Build the Fixed Git and Secure State Foundations
 
@@ -52,10 +52,10 @@ py -m uv run --no-sync pyright
 - Test: `tests/unit/worktrees/test_git.py`
 - Test: `tests/unit/worktrees/test_state.py`
 
-- [ ] Write failing tests for executable revalidation, no shell invocation, fixed global options/config, bounded byte output, timeout cleanup, stable NUL index parsing, stage/mode rejection, batch blob validation, and hostile filenames.
-- [ ] Write failing tests for an absolute state root outside the repository, secure ancestor checks, link/reparse rejection, POSIX permission checks, opaque state IDs, atomic writes/renames, canonical JSON, and immutable blob hashing.
-- [ ] Implement a narrow Git adapter with allowlisted operations only: repository discovery, status/HEAD/index inspection, `cat-file --batch`, worktree add/lock/unlock/remove/prune/list.
-- [ ] Implement the state layout:
+- [x] Write failing tests for executable revalidation, no shell invocation, fixed global options/config, bounded byte output, timeout cleanup, stable NUL index parsing, stage/mode rejection, batch blob validation, and hostile filenames.
+- [x] Write failing tests for an absolute state root outside the repository, secure ancestor checks, link/reparse rejection, POSIX permission checks, opaque state IDs, atomic writes/renames, canonical JSON, and immutable blob hashing.
+- [x] Implement a narrow Git adapter with allowlisted operations only: repository discovery, status/HEAD/index inspection, `cat-file --batch`, worktree add/lock/unlock/remove/prune/list.
+- [x] Implement the state layout:
 
 ```text
 leases/
@@ -68,8 +68,8 @@ candidates/uncertain/
 hooks-empty/
 ```
 
-- [ ] Run focused tests, Ruff, and Pyright.
-- [ ] Commit: `feat: add secure worktree git and state foundations`
+- [x] Run focused tests, Ruff, and Pyright.
+- [x] Commit: `feat: add secure worktree git and state foundations`
 
 ## Task 3: Create No-Checkout Leases and Materialize the Index
 
@@ -80,13 +80,13 @@ hooks-empty/
 - Test: `tests/unit/worktrees/test_manager_leases.py`
 - Test: `tests/integration/test_worktree_materialization.py`
 
-- [ ] Write failing tests that verify exact top-level/non-bare identity, full clean status including untracked files, exact base SHA, active-lease limits, and host-generated paths.
-- [ ] Write failing tests that assert the mandatory `--no-checkout`, detached/locked worktree argv and empty Hooks directory.
-- [ ] Write failing tests for tracked file/byte/depth/path limits, 100644/100755-only entries, sparse/unmerged/gitlink/symlink/special rejection, duplicate/case collision rejection, and truncated Git output.
-- [ ] Materialize regular files exclusively from index blob bytes, preserving only executable/non-executable regular modes.
+- [x] Write failing tests that verify exact top-level/non-bare identity, full clean status including untracked files, exact base SHA, active-lease limits, and host-generated paths.
+- [x] Write failing tests that assert the mandatory `--no-checkout`, detached/locked worktree argv and empty Hooks directory.
+- [x] Write failing tests for tracked file/byte/depth/path limits, 100644/100755-only entries, sparse/unmerged/gitlink/symlink/special rejection, duplicate/case collision rejection, and truncated Git output.
+- [x] Materialize regular files exclusively from index blob bytes, preserving only executable/non-executable regular modes.
 - [ ] Build a fresh `WorkspaceBoundary` rooted at the lease and persist the immutable base manifest before child execution.
-- [ ] Prove with a real Git repository that ignored, untracked, `.env`, cache, and virtual-environment files are absent.
-- [ ] Commit: `feat: materialize governed worktree leases`
+- [x] Prove with a real Git repository that ignored, untracked, `.env`, cache, and virtual-environment files are absent.
+- [x] Commit: `feat: materialize governed worktree leases`
 
 ## Task 4: Capture a Trusted Mutation Ledger
 
@@ -97,12 +97,12 @@ hooks-empty/
 - Test: `tests/unit/worktrees/test_ledger.py`
 - Test: `tests/unit/worktrees/test_child_tools.py`
 
-- [ ] Write failing tests for implementation child capability validation: Read/Search plus Write/Edit and optional fixed test Tool only.
-- [ ] Prove rejection of arbitrary process/Git/MCP/Skills/Hooks/adoption/delegation Tools and all undeclared Tool names.
-- [ ] Wrap successful Write/Edit execution so ledger entries are derived from parsed `MutationResult`, never model arguments.
-- [ ] Enforce ordered contiguous before/after hash chains, exact path normalization, call-ID uniqueness, bounded records, and no ledger entry on failed or preview-only mutations.
-- [ ] Preserve existing analysis Subagent behavior and read-only validator tests.
-- [ ] Commit: `feat: record implementation mutation evidence`
+- [x] Write failing tests for implementation child capability validation: Read/Search plus Write/Edit and optional fixed test Tool only.
+- [x] Prove rejection of arbitrary process/Git/MCP/Skills/Hooks/adoption/delegation Tools and all undeclared Tool names.
+- [x] Wrap successful Write/Edit execution so ledger entries are derived from parsed `MutationResult`, never model arguments.
+- [x] Enforce ordered contiguous before/after hash chains, exact path normalization, call-ID uniqueness, bounded records, and no ledger entry on failed or preview-only mutations.
+- [x] Preserve existing analysis Subagent behavior and read-only validator tests.
+- [x] Commit: `feat: record implementation mutation evidence`
 
 ## Task 5: Snapshot and Persist Verified Candidates
 
@@ -113,13 +113,13 @@ hooks-empty/
 - Test: `tests/unit/worktrees/test_snapshot.py`
 - Test: `tests/unit/worktrees/test_candidate_store.py`
 
-- [ ] Write failing tests for an independent complete scan, link/reparse/special rejection, `.git` rejection, case collisions, path/file/byte/diff limits, and allowed-prefix enforcement.
-- [ ] Compare every materialized base path by raw SHA-256 and detect additions, modifications, deletions, binary/invalid UTF-8 changes, and mode changes.
-- [ ] Require the filesystem changed set to equal the ledger set and every final hash to equal the last ledger hash.
-- [ ] Generate deterministic bounded unified diffs and store after-content blobs separately from the canonical immutable manifest.
-- [ ] Persist valid candidates atomically from `building` to `ready`; return no candidate when there are no changes.
-- [ ] Persist extra regular mutations as a forensic `rejected` manifest before cleanup; retain locked `cleanup_required` leases for severe unsafe or budget failures.
-- [ ] Commit: `feat: persist verified worktree candidates`
+- [x] Write failing tests for an independent complete scan, link/reparse/special rejection, `.git` rejection, case collisions, path/file/byte/diff limits, and allowed-prefix enforcement.
+- [x] Compare every materialized base path by raw SHA-256 and detect additions, modifications, deletions, binary/invalid UTF-8 changes, and mode changes.
+- [x] Require the filesystem changed set to equal the ledger set and every final hash to equal the last ledger hash.
+- [x] Generate deterministic bounded unified diffs and store after-content blobs separately from the canonical immutable manifest.
+- [x] Persist valid candidates atomically from `building` to `ready`; return no candidate when there are no changes.
+- [x] Persist extra regular mutations as a forensic `rejected` manifest before cleanup; retain locked `cleanup_required` leases for severe unsafe or budget failures.
+- [x] Commit: `feat: persist verified worktree candidates`
 
 ## Task 6: Implement Exact Cleanup and Cancellation Finalization
 

@@ -8,9 +8,11 @@ import pytest
 from pydantic import ValidationError
 
 from mini_code_agent.agent.models import AgentLimits
-from mini_code_agent.subagents.models import SubagentProfile
+from mini_code_agent.subagents.models import SubagentProfile, SubagentStatus
 from mini_code_agent.worktrees.models import (
+    CandidateDisposition,
     CandidateFile,
+    CandidateManifest,
     CandidateOperation,
     GitIndexEntry,
     MutationLedgerEntry,
@@ -229,3 +231,38 @@ def test_candidate_file_validates_operation_hashes_and_diff() -> None:
         CandidateFile.model_validate(added.model_dump() | {"before_sha256": "a" * 64})
     with pytest.raises(ValidationError):
         CandidateFile.model_validate(modified.model_dump() | {"diff": "x" * 65_537})
+
+
+def test_candidate_manifest_hashes_canonical_ready_projection(tmp_path: Path) -> None:
+    candidate_file = CandidateFile(
+        path="src/app.py",
+        operation=CandidateOperation.MODIFY,
+        mode="100644",
+        before_sha256="a" * 64,
+        after_sha256="b" * 64,
+        byte_count=12,
+        line_count=1,
+        diff="bounded",
+        content_blob_sha256="b" * 64,
+    )
+    manifest = CandidateManifest.create(
+        candidate_id="candidate-1",
+        lease_id="lease-1",
+        repository_root=tmp_path.resolve(),
+        base_sha="c" * 40,
+        profile_id="implementation",
+        child_id="child-1",
+        child_status=SubagentStatus.COMPLETED,
+        evidence_sha256="d" * 64,
+        disposition=CandidateDisposition.READY,
+        files=(candidate_file,),
+        observed_paths=("src/app.py",),
+    )
+
+    assert manifest.changed_files == 1
+    with pytest.raises(ValidationError):
+        CandidateManifest.model_validate(manifest.model_dump() | {"manifest_sha256": "0" * 64})
+    with pytest.raises(ValidationError):
+        CandidateManifest.model_validate(
+            manifest.model_dump() | {"observed_paths": ("src/other.py",)}
+        )

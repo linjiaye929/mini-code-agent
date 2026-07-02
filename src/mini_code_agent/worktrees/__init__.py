@@ -2,12 +2,16 @@
 
 from mini_code_agent.worktrees.models import (
     BaseManifest,
+    CandidateDisposition,
     CandidateFile,
+    CandidateManifest,
     CandidateOperation,
     CandidateState,
     GitIndexEntry,
     GitIndexPointer,
     MutationLedgerEntry,
+    SnapshotOutcome,
+    SnapshotStatus,
     WorktreeError,
     WorktreeErrorCode,
     WorktreeLease,
@@ -18,12 +22,16 @@ from mini_code_agent.worktrees.models import (
 
 __all__ = [
     "BaseManifest",
+    "CandidateDisposition",
     "CandidateFile",
+    "CandidateManifest",
     "CandidateOperation",
     "CandidateState",
     "GitIndexEntry",
     "GitIndexPointer",
     "MutationLedgerEntry",
+    "SnapshotOutcome",
+    "SnapshotStatus",
     "WorktreeError",
     "WorktreeErrorCode",
     "WorktreeLease",

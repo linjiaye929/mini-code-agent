@@ -16,7 +16,7 @@ from pydantic import (
     model_validator,
 )
 
-from mini_code_agent.subagents.models import SubagentProfile
+from mini_code_agent.subagents.models import SubagentProfile, SubagentStatus
 
 _IDENTIFIER = r"^[A-Za-z0-9][A-Za-z0-9._-]{0,95}$"
 _SHA1 = r"^[0-9a-f]{40}$"
@@ -73,6 +73,18 @@ class CandidateState(StrEnum):
 class CandidateOperation(StrEnum):
     ADD = "add"
     MODIFY = "modify"
+
+
+class CandidateDisposition(StrEnum):
+    READY = "ready"
+    REJECTED = "rejected"
+
+
+class SnapshotStatus(StrEnum):
+    READY = "ready"
+    REJECTED = "rejected"
+    NO_CHANGES = "no_changes"
+    CLEANUP_REQUIRED = "cleanup_required"
 
 
 class WorktreeLimits(BaseModel):
@@ -334,6 +346,159 @@ class CandidateFile(BaseModel):
         return self
 
 
+class CandidateManifest(BaseModel):
+    model_config = ConfigDict(extra="forbid", frozen=True)
+
+    candidate_id: str = Field(pattern=_IDENTIFIER)
+    lease_id: str = Field(pattern=_IDENTIFIER)
+    repository_root: Path
+    base_sha: str = Field(pattern=_SHA1)
+    profile_id: str = Field(pattern=r"^[a-z0-9][a-z0-9_-]{0,63}$")
+    child_id: str = Field(pattern=_IDENTIFIER)
+    child_status: SubagentStatus
+    evidence_sha256: Sha256
+    disposition: CandidateDisposition
+    files: tuple[CandidateFile, ...] = Field(max_length=128)
+    observed_paths: tuple[RelativePath, ...] = Field(max_length=128)
+    changed_files: int = Field(ge=0, le=128)
+    after_content_bytes: int = Field(ge=0, le=_MAX_CANDIDATE_BYTES)
+    rejection_reasons: tuple[str, ...] = Field(default=(), max_length=32)
+    manifest_sha256: Sha256
+
+    @classmethod
+    def create(
+        cls,
+        *,
+        candidate_id: str,
+        lease_id: str,
+        repository_root: Path,
+        base_sha: str,
+        profile_id: str,
+        child_id: str,
+        child_status: SubagentStatus,
+        evidence_sha256: str,
+        disposition: CandidateDisposition,
+        files: tuple[CandidateFile, ...],
+        observed_paths: tuple[str, ...],
+        rejection_reasons: tuple[str, ...] = (),
+    ) -> Self:
+        changed_files = len(observed_paths)
+        after_content_bytes = sum(item.byte_count for item in files)
+        projection = _candidate_manifest_projection(
+            candidate_id=candidate_id,
+            lease_id=lease_id,
+            repository_root=repository_root,
+            base_sha=base_sha,
+            profile_id=profile_id,
+            child_id=child_id,
+            child_status=child_status,
+            evidence_sha256=evidence_sha256,
+            disposition=disposition,
+            files=files,
+            observed_paths=observed_paths,
+            changed_files=changed_files,
+            after_content_bytes=after_content_bytes,
+            rejection_reasons=rejection_reasons,
+        )
+        return cls(
+            candidate_id=candidate_id,
+            lease_id=lease_id,
+            repository_root=repository_root,
+            base_sha=base_sha,
+            profile_id=profile_id,
+            child_id=child_id,
+            child_status=child_status,
+            evidence_sha256=evidence_sha256,
+            disposition=disposition,
+            files=files,
+            observed_paths=observed_paths,
+            changed_files=changed_files,
+            after_content_bytes=after_content_bytes,
+            rejection_reasons=rejection_reasons,
+            manifest_sha256=_canonical_sha256(projection),
+        )
+
+    @field_validator("observed_paths")
+    @classmethod
+    def validate_observed_paths(cls, value: tuple[str, ...]) -> tuple[str, ...]:
+        return tuple(_normalize_relative_path(path) for path in value)
+
+    @field_validator("rejection_reasons")
+    @classmethod
+    def validate_rejection_reasons(cls, value: tuple[str, ...]) -> tuple[str, ...]:
+        if any(
+            not reason
+            or len(reason) > 64
+            or not reason.replace("_", "").isalnum()
+            or reason.lower() != reason
+            for reason in value
+        ):
+            raise ValueError("Candidate rejection reasons are invalid.")
+        return value
+
+    @model_validator(mode="after")
+    def validate_manifest(self) -> Self:
+        file_paths = tuple(item.path for item in self.files)
+        if (
+            tuple(sorted(file_paths)) != file_paths
+            or len({path.casefold() for path in file_paths}) != len(file_paths)
+            or tuple(sorted(self.observed_paths)) != self.observed_paths
+            or len({path.casefold() for path in self.observed_paths}) != len(self.observed_paths)
+            or self.changed_files != len(self.observed_paths)
+            or self.after_content_bytes != sum(item.byte_count for item in self.files)
+        ):
+            raise ValueError("Candidate manifest paths or counts are inconsistent.")
+        if self.disposition is CandidateDisposition.READY:
+            if self.rejection_reasons or not self.files or self.observed_paths != file_paths:
+                raise ValueError("Ready candidate manifest is inconsistent.")
+        elif not self.rejection_reasons:
+            raise ValueError("Rejected candidate manifest requires a reason.")
+        projection = _candidate_manifest_projection(
+            candidate_id=self.candidate_id,
+            lease_id=self.lease_id,
+            repository_root=self.repository_root,
+            base_sha=self.base_sha,
+            profile_id=self.profile_id,
+            child_id=self.child_id,
+            child_status=self.child_status,
+            evidence_sha256=self.evidence_sha256,
+            disposition=self.disposition,
+            files=self.files,
+            observed_paths=self.observed_paths,
+            changed_files=self.changed_files,
+            after_content_bytes=self.after_content_bytes,
+            rejection_reasons=self.rejection_reasons,
+        )
+        if self.manifest_sha256 != _canonical_sha256(projection):
+            raise ValueError("Candidate manifest hash is inconsistent.")
+        return self
+
+
+class SnapshotOutcome(BaseModel):
+    model_config = ConfigDict(extra="forbid", frozen=True)
+
+    lease_id: str = Field(pattern=_IDENTIFIER)
+    status: SnapshotStatus
+    candidate_id: str | None = Field(default=None, pattern=_IDENTIFIER)
+    manifest: CandidateManifest | None = None
+
+    @model_validator(mode="after")
+    def validate_status(self) -> Self:
+        if self.status in {SnapshotStatus.READY, SnapshotStatus.REJECTED}:
+            expected = CandidateDisposition(self.status.value)
+            if (
+                self.candidate_id is None
+                or self.manifest is None
+                or self.manifest.candidate_id != self.candidate_id
+                or self.manifest.lease_id != self.lease_id
+                or self.manifest.disposition is not expected
+            ):
+                raise ValueError("Snapshot candidate outcome is inconsistent.")
+        elif self.candidate_id is not None or self.manifest is not None:
+            raise ValueError("Snapshot non-candidate outcome is inconsistent.")
+        return self
+
+
 def _normalize_relative_path(value: str, *, allow_trailing_slash: bool = False) -> str:
     if "\0" in value or "\\" in value:
         raise ValueError("Worktree paths must be NUL-free POSIX paths.")
@@ -411,3 +576,38 @@ def _canonical_sha256(value: object) -> str:
         sort_keys=True,
     ).encode("utf-8")
     return hashlib.sha256(encoded).hexdigest()
+
+
+def _candidate_manifest_projection(
+    *,
+    candidate_id: str,
+    lease_id: str,
+    repository_root: Path,
+    base_sha: str,
+    profile_id: str,
+    child_id: str,
+    child_status: SubagentStatus,
+    evidence_sha256: str,
+    disposition: CandidateDisposition,
+    files: tuple[CandidateFile, ...],
+    observed_paths: tuple[str, ...],
+    changed_files: int,
+    after_content_bytes: int,
+    rejection_reasons: tuple[str, ...],
+) -> dict[str, object]:
+    return {
+        "after_content_bytes": after_content_bytes,
+        "base_sha": base_sha,
+        "candidate_id": candidate_id,
+        "changed_files": changed_files,
+        "child_id": child_id,
+        "child_status": child_status.value,
+        "disposition": disposition.value,
+        "evidence_sha256": evidence_sha256,
+        "files": [item.model_dump(mode="json") for item in files],
+        "lease_id": lease_id,
+        "observed_paths": list(observed_paths),
+        "profile_id": profile_id,
+        "rejection_reasons": list(rejection_reasons),
+        "repository_root": str(repository_root),
+    }
