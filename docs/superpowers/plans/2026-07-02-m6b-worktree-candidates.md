@@ -182,11 +182,11 @@ hooks-empty/
 - Extend: `tests/integration/test_candidate_adoption.py`
 - Modify: `.github/workflows/ci.yml` only if a required platform gate is missing
 
-- [ ] Cover hostile filenames, Unicode/case aliases, links/reparse points, path swaps, parent HEAD/status races, stale CAS hashes, duplicate IDs, output truncation, killed Git processes, lease exhaustion, candidate tampering, blob tampering, rollback failure, and cancellation races.
-- [ ] Run focused real-Git integration tests on Python 3.12 and 3.13.
-- [ ] Run all unit, integration, adversarial, type, lint, format, package, and coverage gates.
-- [ ] Inspect coverage for all new trust-boundary modules and add missing branch tests.
-- [ ] Commit: `test: harden governed worktree candidates`
+- [x] Cover hostile filenames, Unicode/case aliases, links/reparse points, path swaps, parent HEAD/status races, stale CAS hashes, duplicate IDs, output truncation, killed Git processes, lease exhaustion, candidate tampering, blob tampering, rollback failure, and cancellation races.
+- [x] Run focused real-Git integration tests on Python 3.12 and 3.13.
+- [x] Run all unit, integration, adversarial, type, lint, format, package, and coverage gates.
+- [x] Inspect coverage for all new trust-boundary modules and add missing branch tests.
+- [x] Commit: `test: harden governed worktree candidates`
 
 ## Task 10: Document, Package, Publish, and Record Evidence
 
