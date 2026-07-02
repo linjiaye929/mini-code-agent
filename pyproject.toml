@@ -1,6 +1,6 @@
 [project]
 name = "mini-code-agent"
-version = "0.15.0a0"
+version = "0.16.0a0"
 description = "A framework-light, provider-neutral, enterprise-grade mini code agent."
 readme = "README.md"
 requires-python = ">=3.12,<3.14"

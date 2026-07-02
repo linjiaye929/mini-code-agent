@@ -96,6 +96,27 @@
 - Child summaries are explicitly untrusted and bounded. Evidence stores ToolCall identity,
   error/count metadata, and ToolResult SHA-256 only; Subagent events exclude task, prompt,
   message, summary, argument, ToolResult content, repository content, and exception text.
+- M6b implementation delegation requires a host-owned immutable profile, an exact clean
+  repository/HEAD, a separate non-overlapping state root, a fixed Git executable, path prefixes,
+  and hard tree/candidate/cleanup limits.
+- The host creates locked detached no-checkout Worktrees and materializes only regular
+  `100644`/`100755` index entries from raw Git object bytes. Base identity is persisted as an
+  immutable manifest and exact Worktree administrative directory.
+- Implementation children use fresh non-interactive contexts and exact SUBAGENT-provenance
+  Read/Search/Write/Edit plus optional host-fixed tests. Git, arbitrary commands, network, MCP,
+  delegation, nested approval, deletion, rename, and mode changes are unavailable.
+- Successful structured mutations form a hash-chained ledger. Candidate readiness is decided by
+  independent complete-tree reconciliation against the base manifest, ledger, path allowlist,
+  modes, UTF-8/content hashes, and resource limits.
+- Ready candidates persist canonical manifests and content-addressed blobs outside the repository.
+  Snapshot/cleanup is bounded and shielded during cancellation; identity or removal uncertainty is
+  recorded as `cleanup_required`.
+- Parent adoption is a separate high-risk WRITE Tool and approval. It atomically claims candidate
+  state, requires original clean HEAD, preflights and immediately revalidates every path/hash,
+  applies in canonical order, verifies exact final changes, and leaves files unstaged/uncommitted.
+- Adoption conflicts perform zero candidate writes. Partial failure triggers reverse rollback and
+  records either proven rolled-back or uncertain state; interrupted applying state is classified
+  as all-before, all-after, or mixed before any retry.
 
 ## Non-claims
 
@@ -167,5 +188,19 @@
   encryption, provenance, semantic correctness, or durable parent-child audit.
 - M6a child deadlines depend on cooperative asyncio cancellation and do not stop arbitrary threads
   or prove that an external Provider request incurred no cost.
-- M6a does not implement write-capable children, Worktree isolation, candidate adoption, merging,
-  rollback, durable child Resume, recursive delegation, or token/cost/quality improvements.
+- M6a remains read-only; M6b does not weaken its exact capability, no-recursion, or cancellation
+  boundary.
+- A Git Worktree separates checkout paths. It does not isolate Python memory, OS identity,
+  credentials, filesystem, processes, network, or malicious host-supplied Provider/Tool code.
+- No-checkout materialization avoids working-tree conversion during population but does not prove
+  repository content is safe or trustworthy.
+- Candidate manifests, ledgers, Git IDs, and SHA-256 values are equality fingerprints, not
+  signatures, provenance, confidentiality, semantic correctness, or proof of test success.
+- Git clean/hash checks and immediate path revalidation narrow but cannot eliminate races with a
+  concurrent process that has the same filesystem authority.
+- Adoption is process-serialized and rollback-aware, not power-loss atomic, distributed, or
+  exactly-once. A mixed or unverifiable state intentionally becomes `uncertain`.
+- M6b supports bounded additions/modifications only. It does not delete, rename, stage, commit,
+  merge, push, reset, clean, automatically adopt, durably resume a child, or recursively delegate.
+- M6b does not claim lower token use, latency, cost, higher quality, or throughput without a
+  separate reproducible benchmark.

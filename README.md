@@ -2,15 +2,16 @@
 
 A framework-light, provider-neutral coding agent built from first principles.
 
-> Status: pre-alpha. M6a provides a provider-neutral Agent Core, Anthropic/OpenAI-compatible
+> Status: pre-alpha. M6b provides a provider-neutral Agent Core, Anthropic/OpenAI-compatible
 > adapters, a schema-validating Tool Registry, a cross-platform Workspace boundary, bounded
 > Read/Search, conflict-aware Write/Edit, policy-governed argv command execution, and deterministic
 > context admission, hardened read-only Git evidence, governed Pytest diagnostics, versioned SQLite
 > Session/Trace persistence, fail-closed Checkpoint/Resume, and a host-controlled bounded Repair
 > loop, provenance-aware lazy Skills, deterministic host-registered Tool Hooks, and host-pinned
-> local MCP stdio Tools, and bounded host-profiled read-only analysis Subagents. OS sandboxing,
+> local MCP stdio Tools, bounded host-profiled read-only analysis Subagents, and host-managed
+> Worktree implementation candidates with separately approved adoption. OS sandboxing,
 > shell-string execution, project-provided executable Hooks, automatic Repair resume, remote
-> HTTP/OAuth MCP, write-capable Subagents/Worktrees, and live-provider CI are not implemented.
+> HTTP/OAuth MCP, automatic commit/merge/push, and live-provider CI are not implemented.
 
 ## Requirements
 
@@ -257,6 +258,33 @@ In-process context isolation is not an OS sandbox. M6a cannot write, run command
 Tools, open nested approval prompts, persist durable child traces, create Worktrees, or merge
 changes. See `docs/architecture/governed-subagents.md`.
 
+## Governed Worktree Candidates
+
+M6b adds one separately governed implementation Tool. The parent model supplies only `task` and
+`reason`; the host pins the exact clean repository, external state root, Git executable, allowed
+path prefixes, implementation profile, optional fixed tests, and resource limits.
+
+The host creates a locked detached `--no-checkout` Worktree and materializes the exact Git index
+from raw object bytes. A fresh non-interactive child may use only host-approved Read/Search/
+Write/Edit and optional `run_tests` Tools with `TrustSource.SUBAGENT`. It cannot use Git, arbitrary
+commands, MCP/network, recursive delegation, or parent approval.
+
+After the child stops, the host independently reconciles the complete tree with the immutable base
+manifest and mutation ledger. Ready candidates persist canonical manifests and content-addressed
+blobs outside the repository; the temporary Worktree is then verified and removed. Child
+completion never mutates the parent checkout.
+
+`adopt_subagent_candidate` is a separate high-risk WRITE Tool and approval. It requires the
+original clean `HEAD`, revalidates every path/hash before the first replacement, applies only the
+verified additions/modifications, and leaves them unstaged and uncommitted. Conflicts write
+nothing; partial failures are either proven rolled back or marked uncertain for operator
+recovery. `discard_subagent_candidate` accepts only a verified ready candidate.
+
+Worktree path separation and rollback-aware adoption are not OS sandboxing or crash-atomic
+transactions. M6b does not delete/rename files, run arbitrary commands, commit, merge, push, or
+claim token/latency improvements. See
+`docs/architecture/governed-worktree-candidates.md`.
+
 ## Documentation
 
 - Product design: `docs/superpowers/specs/2026-06-29-mini-code-agent-design.md`
@@ -277,6 +305,7 @@ changes. See `docs/architecture/governed-subagents.md`.
 - Governed Skills and Hooks: `docs/architecture/governed-extensions.md`
 - Governed MCP stdio: `docs/architecture/governed-mcp.md`
 - Governed analysis Subagents: `docs/architecture/governed-subagents.md`
+- Governed Worktree candidates: `docs/architecture/governed-worktree-candidates.md`
 - Threat model: `docs/architecture/threat-model.md`
 - Provider protocol ADR: `docs/adr/0002-provider-wire-protocols.md`
 - Workspace boundary ADR: `docs/adr/0003-workspace-boundary.md`
@@ -291,6 +320,7 @@ changes. See `docs/architecture/governed-subagents.md`.
 - Inert Skills and host Hooks ADR: `docs/adr/0012-inert-skills-host-hooks.md`
 - Host-pinned stdio MCP ADR: `docs/adr/0013-host-pinned-stdio-mcp.md`
 - Bounded host-profiled Subagents ADR: `docs/adr/0014-bounded-host-profiled-subagents.md`
+- Governed Worktree candidates ADR: `docs/adr/0015-governed-worktree-candidates.md`
 
 ## License
 

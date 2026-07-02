@@ -4,7 +4,7 @@ from mini_code_agent import __version__
 
 
 def test_package_exports_release_version() -> None:
-    assert __version__ == "0.15.0a0"
+    assert __version__ == "0.16.0a0"
 
 
 def test_package_includes_pep561_marker() -> None:

@@ -77,7 +77,7 @@ class SubagentProfile(BaseModel):
     description: str = Field(min_length=1, max_length=500)
     system_prompt: str = Field(min_length=1, max_length=20_000)
     tool_names: tuple[ToolName, ...] = Field(min_length=1, max_length=16)
-    mode: Literal["analysis"] = "analysis"
+    mode: Literal["analysis", "implementation"] = "analysis"
     agent_limits: AgentLimits = Field(default_factory=AgentLimits)
     limits: SubagentLimits = Field(default_factory=SubagentLimits)
 

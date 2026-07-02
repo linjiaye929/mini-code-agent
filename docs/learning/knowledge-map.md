@@ -819,7 +819,8 @@
 M6 分成两个独立权限阶段：
 
 - **M6a 已实现**：同进程、fresh context、不可递归、只读分析 Subagent；
-- **M6b 待实现**：宿主创建 Git Worktree、写入候选快照、单独审批 adoption。
+- **M6b 已实现，待发布**：宿主创建 Git Worktree、独立验证并持久化候选、单独审批
+  adoption。
 
 不要因为两者都叫 Subagent 就把“并行读”和“并行改”当成同一个安全问题。
 
@@ -902,6 +903,85 @@ M6 分成两个独立权限阶段：
     approval、cleanup 和 rollback uncertainty。M6a 不能把“只读 child 已安全”外推成“同进程
     child 可以直接改 parent checkout”。
 
+**M6b 前置知识**
+
+- Git 的 `HEAD`、index、object database、working tree 是四个不同状态层；Worktree 共享
+  object database，但有独立工作目录和 index/admin state。
+- `git worktree add --detach --no-checkout` 只创建 Worktree 关系，不自动把 index 内容写成
+  working-tree 文件；本项目再通过 `ls-files --stage -z` 与 `cat-file --batch` 读取对象。
+- Git object ID 和 SHA-256 都是内容身份，不是签名。首版对象解析只接受 40 字符 SHA-1。
+- compare-and-set（CAS）状态迁移：只有观察到预期旧状态时才能写入新状态，例如
+  `ready -> applying`；它用于拒绝并发重复采用。
+- content-addressed storage：以内容 hash 命名候选 blob，manifest 只引用 hash，采用时重新
+  验证内容。
+- TOCTOU：检查路径/哈希后到替换前仍可能被并发修改，因此要在第一次写入前对全部目标再
+  校验，但这仍不是 OS 隔离。
+- 多文件原子性与单文件原子替换不同。`os.replace` 只能保证一次替换；跨文件失败需要逆序
+  rollback，并保留无法证明恢复时的 `uncertain`。
+- `asyncio.shield` 只保护 finalization Task 不被外层取消直接打断；仍需 deadline、join 和
+  cleanup-required 状态。
+
+**M6b 实现主线**
+
+1. **Host-pinned profile**
+
+   `WorktreeProfile` 固定 repository/state root、Git executable、allowed path prefixes、
+   implementation `SubagentProfile` 和所有 tree/candidate/cleanup budgets。state root 必须与
+   repository 分离，模型只能传 `task/reason`。
+
+2. **Clean base admission**
+
+   `WorktreeManager` 要求 exact top-level、非 bare、完整 clean status，先后两次验证 `HEAD`
+   与 status，并从 index pointers/raw blobs 形成不可变 `BaseManifest`。ignored/untracked
+   内容不会复制进 child。
+
+3. **No-checkout materialization**
+
+   宿主创建 locked detached Worktree，再只把 `100644/100755` Git blobs 写成普通文件。
+   symlink、gitlink、非法/大小写别名、过深路径、超文件数/字节数全部 fail closed。
+
+4. **Exact implementation capability**
+
+   child 使用 fresh context、`NON_INTERACTIVE` 和 `TrustSource.SUBAGENT`。仅允许
+   Read/Search/Write/Edit，可选 fixed `run_tests`；不允许 Git、任意 command、MCP/network、
+   Skill/Hook 注册、递归 delegation、删除、rename 或 mode change。
+
+5. **Mutation ledger**
+
+   只有成功返回结构化 `MutationResult` 的 Write/Edit 才追加 entry。entry 绑定 ToolCall、
+   path、before/after hash、bytes/lines，并形成 predecessor hash chain；child 文字不能声明
+   某个文件已经成为候选。
+
+6. **Independent snapshot**
+
+   child 结束后，宿主遍历完整 Worktree，把实际树与 BaseManifest、ledger、allowed prefixes、
+   mode/UTF-8/hash/预算逐项对账。通过后生成 sorted manifest、bounded diff 与
+   content-addressed blobs；未知改动、删除或对账失败进入 rejected。
+
+7. **Fail-closed finalization**
+
+   snapshot 在 cleanup 前完成。cleanup 重新验证 lease、admin dir、Git worktree list 和候选
+   持久化，再 unlock/remove/prune；失败则 relock 并记录 `cleanup_required`。外部取消继续
+   上抛，但 bounded shielded finalization 先尝试收尾。
+
+8. **Separate adoption approval**
+
+   `adopt_subagent_candidate` 是独立 high-risk WRITE Tool。preview 先验 manifest/blob，执行时
+   CAS claim `ready -> applying`，要求 parent 仍为原 clean `HEAD`，预检并在首次替换前再次
+   校验所有 path/hash。冲突零写入，成功后文件仍 unstaged/uncommitted。
+
+9. **Rollback and recovery**
+
+   中途 I/O 失败按逆序 rollback：全部恢复才记录 `apply_failed_rolled_back`，不能证明则
+   `uncertain`。进程中断后的 `applying` 根据全部文件的 before/after hash 分类：
+   all-before 回 `ready`、all-after 记 `applied`、mixed 进 `uncertain`。
+
+10. **边界结论**
+
+    Worktree 是 checkout 路径隔离，不是容器；adoption 是进程内串行和 rollback-aware，
+    不是断电原子事务或 Flink exactly-once。candidate ready 只证明字节符合协议，不证明代码
+    正确，也不等于用户已批准采用。
+
 **Java / Flink / Spark 概念映射**
 
 | 既有经验 | M6a 对应概念 | 关键差异 |
@@ -917,6 +997,19 @@ M6 分成两个独立权限阶段：
 | Flink cancellation | `CancelledError` propagation | Python 库必须显式不吞取消；线程/外部系统未必协作停止 |
 | Spark task result accumulator | `SubagentBatchResult` | summary 不可信，证据只保留有界 metadata/hash |
 | 数据血缘 fingerprint | ToolResult SHA-256 | hash 是内容身份，不是业务正确性或来源签名 |
+
+**M6b 的 Java / Flink / Spark 映射**
+
+| 既有经验 | M6b 对应概念 | 关键差异 |
+|---|---|---|
+| Maven 构建的固定 source revision | Git index/object base manifest | manifest 固定输入字节，不运行 checkout filter |
+| 线程池 task slot / Flink subtask namespace | Worktree lease | lease 隔离目录与生命周期，不隔离 OS 进程/凭证 |
+| Kafka changelog / Flink state delta | mutation ledger | ledger 记录受治理成功写入，但最终仍需全树对账 |
+| Checkpoint metadata + immutable state files | candidate manifest + content blobs | ready 是字节协议状态，不是业务成功 |
+| 乐观锁 `@Version` / CAS | candidate state claim | 防重复采用，不是分布式锁 |
+| 两阶段发布 | implementation -> adoption | 类似 prepare/publish，但不是数据库 2PC 或 exactly-once |
+| Spark output commit protocol | stage temp -> canonical replace -> verify | 多文件提交仍可能部分失败，需要 rollback/recovery |
+| Flink checkpoint recovery classification | all-before/all-after/mixed | mixed 进入人工处理，不自动猜测重放 |
 
 **代码阅读顺序**
 
@@ -955,6 +1048,35 @@ M6 分成两个独立权限阶段：
     exception 为什么都不应进入 observability event。
 12. 为 M6b 写一页威胁清单：clean base、no-checkout Worktree、allowed path、candidate
     snapshot、adoption approval、conflict 和 cleanup uncertainty；不要修改 M6a profile。
+
+**M6b 代码阅读顺序**
+
+1. `worktrees/models.py`：先看 Profile、Limits、lease/candidate state machine 和跨字段不变量。
+2. `worktrees/git.py` 与 `materialize.py`：看 fixed argv、NUL/byte protocol、index blob 和
+   no-checkout materialization。
+3. `worktrees/state.py`：看外部 state root、原子写、CAS claim、manifest/blob 验证。
+4. `worktrees/manager.py`：按 clean admission、lease create、admin identity、cleanup 跟踪。
+5. `worktrees/ledger.py`：看为什么只接受成功的 structured mutation result。
+6. `worktrees/snapshot.py`：看 complete-tree reconciliation 和 ready/rejected 决策。
+7. `worktrees/finalization.py` 与 `runner.py`：看 child、snapshot、cleanup、cancellation 的所有权。
+8. `worktrees/tools.py`：看 parent 模型为什么只能传 task/reason。
+9. `worktrees/adoption.py`：按 preview、claim、preflight、revalidate、apply、rollback、recover
+   阅读。
+10. `tests/integration/test_governed_worktree_agent.py`、`test_candidate_adoption.py` 与
+    `tests/adversarial/test_worktree_safety.py`：用失败场景反推边界。
+
+**M6b 验收练习**
+
+1. 在一个 tracked 文件旁放 ignored secret，创建 lease 后证明 ignored 文件没有进入 child。
+2. 比较普通 checkout 与 no-checkout/raw blob materialization，说明 filter/hook 执行面的差异。
+3. 让 child 直接改文件但不产生 ledger entry，验证 candidate 为什么 rejected。
+4. 在 snapshot 前制造删除、symlink、case alias 和 scope 外新增，记录 rejection reason。
+5. 在 adoption preview 后修改 parent 文件，证明 execute 阶段冲突且 candidate 文件零写入。
+6. 对第二个文件注入 replace failure，分别验证 rollback 成功与 rollback 失败两种状态。
+7. 人工构造 `applying` 的 all-before、all-after、mixed 三种磁盘状态，解释 recovery 结果。
+8. 取消 blocked child，验证 `CancelledError` 上抛、finalization 有界运行且无 orphan Task。
+9. 检查采用后的 `git status`，证明改动 unstaged/uncommitted，且 Harness 没有 merge/push 权限。
+10. 用自己的话解释：“Worktree candidate 像两阶段发布，但为什么不能写成 2PC/exactly-once”。
 
 ### L12：CI、Benchmark 与发布
 

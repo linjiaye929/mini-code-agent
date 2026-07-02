@@ -59,8 +59,36 @@ text.
 M6a children are in-process and are not an OS, process, memory, credential, or network sandbox.
 Read-only Tool admission does not constrain malicious host-supplied Provider or Tool code.
 Evidence hashes are not signatures, semantic validation, confidentiality, or durable audit.
-M6a does not support child writes, command/network Tools, recursive delegation, Worktrees,
-candidate adoption, merge, rollback, or exactly-once execution.
+M6a remains read-only and does not support child writes, command/network Tools, recursive
+delegation, Worktrees, candidate adoption, merge, rollback, or exactly-once execution.
+
+M6b implementation delegation uses a separate immutable host profile. It pins an exact clean
+repository and `HEAD`, an external non-overlapping state root, absolute Git executable, allowed
+path prefixes, implementation Tool set, and hard tree/candidate/cleanup limits. The host creates
+a locked detached no-checkout Worktree and materializes only regular `100644`/`100755` index
+entries from raw Git object bytes. Ignored/untracked files, links, gitlinks, unsupported modes,
+case aliases, and over-budget trees do not enter the lease.
+
+Implementation children are fresh, non-interactive, and limited to SUBAGENT-provenance
+Read/Search/Write/Edit plus optional host-fixed tests. They receive no Git, arbitrary command,
+network, MCP, recursive delegation, deletion, rename, or parent approval authority. Successful
+structured mutations form a hash-chained ledger, but candidate readiness is decided by an
+independent complete-tree reconciliation against the immutable base manifest, ledger, path
+allowlist, modes, content hashes, and resource limits.
+
+Ready candidates persist canonical manifests and content-addressed blobs outside the repository.
+Child completion never mutates the parent checkout. Adoption requires a separate high-risk WRITE
+Tool, Policy decision, and approval. It revalidates the original clean `HEAD`, every path and
+before-hash, applies only the verified candidate set, verifies after-hashes, and leaves changes
+unstaged and uncommitted. Conflicts write no candidate files. Partial failure is either proven
+rolled back or recorded as uncertain; interrupted applying state is classified before reuse.
+
+Worktree path separation is not an OS, process, memory, credential, filesystem, or network
+sandbox. In-process trusted Provider/Tool code retains the Agent process authority. Clean/hash
+checks narrow but do not eliminate races with another process. Multi-file adoption is
+process-serialized and rollback-aware, not power-loss atomic, distributed, exactly-once, or a
+database two-phase commit. M6b does not delete/rename files, automatically adopt, stage, commit,
+merge, push, reset, clean, or durably resume a child.
 
 The project does not claim OS-level sandboxing unless an explicit sandbox backend is enabled and
 documented. It also does not claim that Hook timeout stops work delegated to another thread or

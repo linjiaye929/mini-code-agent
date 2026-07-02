@@ -36,6 +36,8 @@ jobs:
       - run: uv run --no-sync python tests/artifact_test.py
       - run: uv run --python 3.13 --isolated --no-project --with dist/*.whl tests/smoke_test.py
       - run: uv run --python 3.13 --isolated --no-project --with dist/*.tar.gz tests/smoke_test.py
+      - run: uv run --python 3.13 --isolated --no-project --with dist/*.whl tests/worktree_artifact_test.py
+      - run: uv run --python 3.13 --isolated --no-project --with dist/*.tar.gz tests/worktree_artifact_test.py
 
   tests:
     strategy:

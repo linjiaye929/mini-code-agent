@@ -4,6 +4,61 @@ All notable changes follow Keep a Changelog. Versions follow Semantic Versioning
 
 ## [Unreleased]
 
+## [0.16.0-alpha.0] - 2026-07-02
+
+### Added
+
+- Immutable host-owned `WorktreeProfile` and bounded lease/candidate/adoption state models with
+  separate repository and state roots, exact implementation profiles, path prefixes, and hard
+  tree/content/cleanup limits.
+- Byte-safe fixed-argv Git boundary for exact clean repository admission, NUL-delimited index
+  pointers, raw object reads, locked detached no-checkout Worktrees, administrative identity,
+  bounded process lifecycle, and verified cleanup.
+- Raw index materialization for regular `100644`/`100755` files plus immutable base manifests,
+  successful structured-mutation hash chains, complete-tree reconciliation, bounded diffs,
+  content-addressed candidate blobs, and canonical manifest hashes.
+- `delegate_implementation` with model-visible `task/reason` only, fresh non-interactive
+  implementation children, exact SUBAGENT-provenance Read/Search/Write/Edit Tools, optional
+  host-fixed tests, independent snapshot, and cancellation-safe finalization.
+- Separate high-risk `adopt_subagent_candidate` and `discard_subagent_candidate` Tools with
+  verified previews, ready/applying claims, clean-base/path/hash revalidation, canonical apply,
+  rollback, interrupted-state recovery, and uncertain-state evidence.
+- Real-Git implementation/adoption integration and adversarial tests for hostile paths, aliases,
+  links, races, tampering, output/process limits, lease exhaustion, cancellation, cleanup, and
+  rollback failure.
+- M6b architecture, threat-model, ADR, learning, and resume documentation.
+
+### Changed
+
+- Public package exports and installed-package smoke now include the governed Worktree profile,
+  runner, candidate, adoption, and discard APIs.
+- M6a analysis profiles remain read-only; implementation is a separate profile and parent Tool
+  rather than a capability upgrade.
+
+### Security
+
+- Child completion cannot mutate or authorize mutation of the parent checkout. Candidate adoption
+  requires a second Policy/approval decision and exact original clean `HEAD`.
+- Ordinary checkout is avoided during lease population. Only bounded regular files from verified
+  Git index/object bytes are materialized; ignored/untracked files, links, gitlinks, aliases,
+  unsupported modes, and over-budget trees fail closed.
+- Ready candidates come from independent full-tree/base/ledger reconciliation and verified stored
+  blobs, not child summaries or bounded diff text.
+- Adoption conflicts write no candidate files. Partial failures are either proven rolled back or
+  persisted as uncertain; interrupted applying states are classified as all-before, all-after, or
+  mixed before reuse.
+- Worktree separation is not OS isolation, and multi-file adoption is not power-loss atomic,
+  distributed, exactly-once, or a database two-phase commit.
+
+### Verification
+
+- Local Python 3.12.13 and 3.13.14 each passed 1184 tests with 13 platform/privilege skips.
+  Python 3.13 package branch coverage was 88.49%, above the 85% gate. Ruff format/check, strict
+  Pyright, Bandit, and locked runtime dependency audit passed.
+- Final reproducible artifact hashes, isolated smoke evidence, PR/main CI run IDs, tag commit,
+  release URL, and remote asset digests will be recorded after the remaining release gates
+  complete.
+
 ## [0.15.0-alpha.0] - 2026-07-02
 
 ### Added

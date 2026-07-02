@@ -121,6 +121,20 @@ def test_analysis_profile_is_exact_frozen_and_bounded() -> None:
         profile.tool_names = ("write_file",)  # type: ignore[misc]
 
 
+def test_profile_accepts_explicit_implementation_mode() -> None:
+    profile = SubagentProfile.model_validate(
+        profile_for().model_dump()
+        | {
+            "profile_id": "implementation",
+            "local_name": "delegate_implementation",
+            "mode": "implementation",
+            "tool_names": ("read_file", "write_file"),
+        }
+    )
+
+    assert profile.mode == "implementation"
+
+
 @pytest.mark.parametrize(
     "tool_names",
     [

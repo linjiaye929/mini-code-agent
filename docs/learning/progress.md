@@ -13,8 +13,8 @@
 | L8 Git/test/repair | Complete and released | M4a Git + M4b Pytest + M4c bounded Repair |
 | L9 Skills and Hooks | Complete and released | Inert Skills + monotonic Tool Hooks; v0.13 evidence |
 | L10 MCP | Complete and released | Governed stdio, exact grants, real SDK integration; v0.14 evidence |
-| L11 Subagent and Worktree | M6a complete and released; M6b not started | Host-profiled read-only Subagents, TaskGroup, real parent/child integration |
-| L12 CI, benchmark and release | In progress | v0.15 prerelease and cross-platform evidence complete |
+| L11 Subagent and Worktree | M6a released; M6b implementation complete, release gate in progress | Host-profiled analysis plus governed Worktree candidates/adoption |
+| L12 CI, benchmark and release | In progress | v0.15 released; v0.16 local/cross-version gates in progress |
 
 ## L0 Notes
 
@@ -796,3 +796,75 @@
   `bba51dd17fb0d0ba8852c7be86c10add7e07e3ad`。非 draft GitHub prerelease
   <https://github.com/linjiayebat/mini-code-agent/releases/tag/v0.15.0-alpha.0> 已发布，
   远端 asset name、size 与 GitHub SHA-256 digest 均与上述本地制品一致。
+
+## M6b Governed Worktree Candidate Notes
+
+- M6b 没有把 M6a analysis profile 改成可写，而是新增独立 implementation profile。Parent
+  `delegate_implementation` 的模型输入只有 `task/reason`；repository/state root、Git、
+  allowed path、child Tool、固定测试和预算全部由宿主 immutable `WorktreeProfile` 固定。
+- lease admission 要求 exact non-bare repository top-level、完整 clean status 和稳定 `HEAD`。
+  宿主读取 NUL-delimited index pointers 与 raw Git blobs，并在读取后再次验证 HEAD/status。
+- Worktree 用 locked detached `--no-checkout` 创建。`materialize_index()` 只写
+  `100644/100755` 普通文件，不复制 ignored/untracked 内容，也不经过 checkout filter；
+  symlink/gitlink、大小写 alias、非法路径和所有 tree budget fail closed。
+- child 使用 fresh context、`SessionMode.NON_INTERACTIVE` 和
+  `TrustSource.SUBAGENT`。exact capability 是 Read/Search/Write/Edit 加可选 fixed
+  `run_tests`；Git、arbitrary command、MCP/network、Skills/Hooks、delegation、delete、
+  rename、mode change 和 nested approval 都不可用。
+- `LedgerRecordingToolExecutor` 只从成功 structured `MutationResult` 生成 immutable ledger
+  entry，绑定 ToolCall/path/before-after hash/bytes/lines 并形成 hash chain。模型 summary
+  或直接绕过 Tool 的磁盘修改不会自动获得候选身份。
+- `CandidateSnapshotter` 独立扫描完整树，与 immutable BaseManifest、ledger、allowed
+  prefixes、mode、UTF-8、hash 和资源预算对账。ready candidate 只包含 sorted add/modify、
+  bounded diff 与 content-addressed after blobs；未知改动、删除、alias/link、ledger mismatch
+  或超限进入 rejected。
+- snapshot 先于 cleanup。cleanup 重验 lease/admin dir/worktree registration/candidate
+  persistence，再 unlock/remove/prune；删除失败会尝试 relock 并记录 `cleanup_required`。
+  cancellation 继续上抛，但先运行带 deadline 的 shielded finalization。
+- `adopt_subagent_candidate` 和 `discard_subagent_candidate` 是两个独立 high-risk WRITE
+  Tool。preview 先验证 manifest/blob；adoption execute CAS claim `ready -> applying`，
+  要求 parent 仍为原 clean HEAD，预检全部目标、stage 同目录 temp，并在首次 replace 前再次
+  验证全部 path/hash。
+- preflight conflict 产生零 candidate 写入并回到 `ready`。中途 I/O failure 逆序
+  rollback：能证明 all-before 才记录 rolled-back，不能证明就进入 `uncertain`。中断后的
+  applying recovery 只接受 all-before->ready、all-after->applied、mixed->uncertain。
+- 成功 adoption 只把 exact candidate additions/modifications 留在 parent working tree，
+  保持 unstaged/uncommitted；Harness 不执行 branch/commit/merge/push/reset/clean。
+- Worktree 是 checkout path separation，不是 OS sandbox。Adoption 是 process-serialized、
+  rollback-aware 文件协议，不是 power-loss atomic transaction、2PC 或 exactly-once。
+
+## M6b Review Lessons
+
+- 只调用 `git worktree add` 不等于安全 materialization。普通 checkout 的 filter/smudge 和
+  repository config 是额外执行面；首版从 index/object bytes 显式构造受限树。
+- mutation ledger 是审计线索，不是最终事实。只有把完整实际树、base manifest 和 ledger
+  三方对账，才能发现 Tool 外改动、删除或漏记。
+- bounded diff 只用于 preview；采用必须读取 content-addressed blob 并重新 hash，不能把
+  截断展示文本当 source of truth。
+- clean repository 是 point-in-time observation。adoption 必须在 preview 后重新验证
+  repo/HEAD/status/path/hash，并在第一处替换前再次全量 revalidate。
+- 单文件 `os.replace` 原子不等于多文件原子。公开状态必须区分 conflict、rolled-back 和
+  uncertain，不能在 rollback 未证明时返回普通失败。
+- cleanup failure 不是日志 warning。仍注册或 admin identity 不明的 Worktree 必须持久化
+  `cleanup_required`，后续 operator 才有可诊断入口。
+- `asyncio.shield` 不是“忽略取消”。正确语义是 caller 仍收到 `CancelledError`，内部
+  finalization 在独立 deadline 内完成或记录 timeout。
+- candidate ready、child success、tests passed 和 user approval 是四个不同事实，任何一个
+  都不能替代另一个。
+
+## M6b Local Implementation Verification
+
+- 真实 Git 集成覆盖 no-checkout materialization、raw index blob、clean base race、parent
+  checkout bytes unchanged、implementation child、candidate persistence、adoption/discard、
+  stale conflict、rollback/recovery 和 cancellation finalization。
+- adversarial suite 覆盖 hostile filename、Unicode/case alias、link/reparse point、path
+  swap、parent HEAD/status race、stale CAS、duplicate ID、Git output truncation/termination、
+  lease exhaustion、candidate/blob tampering、rollback failure 与 cleanup race。
+- Python 3.13.14 完整质量门禁为 1184 passed、13 skipped，package branch coverage
+  88.49%，超过 85% 门槛；Ruff format/check、strict Pyright 与 Bandit 通过，locked
+  runtime dependency audit 为 `No known vulnerabilities found`。
+- 独立 Python 3.12.13 环境同样为 1184 passed、13 skipped。13 个 Windows skip 包括既有
+  symlink privilege 条件与仅在 POSIX 验证 mode/case/FIFO 的场景；Ubuntu CI 将执行对应
+  POSIX 路径。
+- 最终源码冻结后的 reproducible build、四组 artifact smoke、PR/main CI、tag、Release 与
+  远端 digest 仍需完成后再记录，不能把中间构建写成发布成果。

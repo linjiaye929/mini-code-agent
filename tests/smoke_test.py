@@ -24,6 +24,14 @@ from mini_code_agent.subagents import (
 )
 from mini_code_agent.testing import PytestRunner
 from mini_code_agent.tools import RunTestsTool
+from mini_code_agent.worktrees import (
+    AdoptSubagentCandidateTool,
+    CandidateSnapshotter,
+    DelegateImplementationTool,
+    WorktreeImplementationRunner,
+    WorktreeManager,
+    build_worktree_tools,
+)
 
 
 def verify_installed_package() -> None:
@@ -43,6 +51,12 @@ def verify_installed_package() -> None:
     assert len(schema_sha256({"type": "object"})) == 64
     assert PytestRunner.__name__ == "PytestRunner"
     assert RunTestsTool.__name__ == "RunTestsTool"
+    assert CandidateSnapshotter.__name__ == "CandidateSnapshotter"
+    assert AdoptSubagentCandidateTool.__name__ == "AdoptSubagentCandidateTool"
+    assert DelegateImplementationTool.__name__ == "DelegateImplementationTool"
+    assert WorktreeImplementationRunner.__name__ == "WorktreeImplementationRunner"
+    assert WorktreeManager.__name__ == "WorktreeManager"
+    assert build_worktree_tools.__name__ == "build_worktree_tools"
     executable = shutil.which("mini-code-agent")
     assert executable is not None
     result = subprocess.run(
