@@ -84,7 +84,7 @@ hooks-empty/
 - [x] Write failing tests that assert the mandatory `--no-checkout`, detached/locked worktree argv and empty Hooks directory.
 - [x] Write failing tests for tracked file/byte/depth/path limits, 100644/100755-only entries, sparse/unmerged/gitlink/symlink/special rejection, duplicate/case collision rejection, and truncated Git output.
 - [x] Materialize regular files exclusively from index blob bytes, preserving only executable/non-executable regular modes.
-- [ ] Build a fresh `WorkspaceBoundary` rooted at the lease and persist the immutable base manifest before child execution.
+- [x] Build a fresh `WorkspaceBoundary` rooted at the lease and persist the immutable base manifest before child execution.
 - [x] Prove with a real Git repository that ignored, untracked, `.env`, cache, and virtual-environment files are absent.
 - [x] Commit: `feat: materialize governed worktree leases`
 
@@ -147,13 +147,13 @@ hooks-empty/
 - Test: `tests/unit/worktrees/test_delegate_tool.py`
 - Test: `tests/integration/test_governed_worktree_agent.py`
 
-- [ ] Define a parent `delegate_implementation` Tool whose model-visible input is only `{task, reason}` and whose output is bounded candidate metadata/evidence.
-- [ ] Compose the exact local implementation profile and host factories before any Provider I/O.
-- [ ] Run one implementation child per Tool call inside its lease, project bounded child evidence, snapshot independently, and finalize cleanup.
-- [ ] Ensure child timeout, failure, cancellation, no-change completion, rejected snapshot, and candidate-ready paths have deterministic public results.
-- [ ] Add CLI/composition wiring without enabling the feature by default when no Worktree profile is configured.
-- [ ] Prove end-to-end with a scripted Provider that child completion leaves the parent checkout unchanged.
-- [ ] Commit: `feat: delegate bounded implementation work`
+- [x] Define a parent `delegate_implementation` Tool whose model-visible input is only `{task, reason}` and whose output is bounded candidate metadata/evidence.
+- [x] Compose the exact local implementation profile and host factories before any Provider I/O.
+- [x] Run one implementation child per Tool call inside its lease, project bounded child evidence, snapshot independently, and finalize cleanup.
+- [x] Ensure child timeout, failure, cancellation, no-change completion, rejected snapshot, and candidate-ready paths have deterministic public results.
+- [x] Add public composition exports and smoke coverage without enabling the feature unless a host supplies a `WorktreeProfile`.
+- [x] Prove end-to-end with a scripted Provider that child completion leaves the parent checkout unchanged.
+- [x] Commit: `feat: delegate bounded implementation work`
 
 ## Task 8: Adopt, Roll Back, Recover, and Discard Candidates
 

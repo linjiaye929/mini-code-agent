@@ -135,6 +135,16 @@ class WorktreeManager:
                 lease.model_dump(mode="json", exclude={"base_manifest"}),
             )
             return lease
+        except asyncio.CancelledError:
+            if worktree_created or paths.worktree.exists():
+                with suppress(WorktreeStateError):
+                    self._store.record_cleanup_required(
+                        lease_id,
+                        "creation_failed",
+                    )
+            else:
+                self._abandon_empty_lease(lease_id)
+            raise
         except WorktreeError:
             if not worktree_created:
                 self._abandon_empty_lease(lease_id)
@@ -270,6 +280,13 @@ class WorktreeManager:
     def _abandon_empty_lease(self, lease_id: str) -> None:
         with suppress(WorktreeStateError):
             self._store.abandon_empty_lease(lease_id)
+
+    def record_cancellation_timeout(self, lease: WorktreeLease) -> None:
+        with suppress(WorktreeStateError):
+            self._store.record_cleanup_required(
+                lease.lease_id,
+                "cancellation_timeout",
+            )
 
     def _cleanup_required(self, lease: WorktreeLease) -> CleanupResult:
         with suppress(WorktreeStateError):

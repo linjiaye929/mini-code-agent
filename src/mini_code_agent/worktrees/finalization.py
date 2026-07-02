@@ -90,22 +90,37 @@ async def await_with_cancellation_finalization[T](
     try:
         return await child
     except asyncio.CancelledError:
-        task = asyncio.create_task(finalize())
-        try:
-            await asyncio.wait_for(
-                asyncio.shield(task),
-                timeout=timeout_seconds,
-            )
-        except TimeoutError:
-            task.cancel()
-            await asyncio.gather(task, return_exceptions=True)
-            if on_timeout is not None:
-                with suppress(Exception):
-                    on_timeout()
-        except asyncio.CancelledError:
-            if not task.done():
-                task.cancel()
-            await asyncio.gather(task, return_exceptions=True)
-        except Exception:
-            pass
+        await run_cancellation_finalization(
+            finalize=finalize,
+            timeout_seconds=timeout_seconds,
+            on_timeout=on_timeout,
+        )
         raise
+
+
+async def run_cancellation_finalization(
+    *,
+    finalize: Callable[[], Coroutine[Any, Any, object]],
+    timeout_seconds: float,
+    on_timeout: Callable[[], None] | None = None,
+) -> None:
+    if not 0 < timeout_seconds <= 300:
+        raise ValueError("Cancellation finalization timeout is invalid.")
+    task = asyncio.create_task(finalize())
+    try:
+        await asyncio.wait_for(
+            asyncio.shield(task),
+            timeout=timeout_seconds,
+        )
+    except TimeoutError:
+        task.cancel()
+        await asyncio.gather(task, return_exceptions=True)
+        if on_timeout is not None:
+            with suppress(Exception):
+                on_timeout()
+    except asyncio.CancelledError:
+        if not task.done():
+            task.cancel()
+        await asyncio.gather(task, return_exceptions=True)
+    except Exception:
+        pass

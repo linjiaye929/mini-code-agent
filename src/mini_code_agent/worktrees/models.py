@@ -16,7 +16,11 @@ from pydantic import (
     model_validator,
 )
 
-from mini_code_agent.subagents.models import SubagentProfile, SubagentStatus
+from mini_code_agent.subagents.models import (
+    SubagentChildResult,
+    SubagentProfile,
+    SubagentStatus,
+)
 
 _IDENTIFIER = r"^[A-Za-z0-9][A-Za-z0-9._-]{0,95}$"
 _SHA1 = r"^[0-9a-f]{40}$"
@@ -527,6 +531,62 @@ class WorktreeFinalizationResult(BaseModel):
         return self
 
 
+class ImplementationRunResult(BaseModel):
+    model_config = ConfigDict(extra="forbid", frozen=True)
+
+    profile_id: str = Field(pattern=r"^[a-z0-9][a-z0-9_-]{0,63}$")
+    child: SubagentChildResult
+    finalization: WorktreeFinalizationResult
+    duration_ms: int = Field(ge=0, le=3_700_000)
+    result_sha256: Sha256
+
+    @classmethod
+    def create(
+        cls,
+        *,
+        profile_id: str,
+        child: SubagentChildResult,
+        finalization: WorktreeFinalizationResult,
+        duration_ms: int,
+    ) -> Self:
+        projection = _implementation_run_projection(
+            profile_id=profile_id,
+            child=child,
+            finalization=finalization,
+            duration_ms=duration_ms,
+        )
+        return cls(
+            profile_id=profile_id,
+            child=child,
+            finalization=finalization,
+            duration_ms=duration_ms,
+            result_sha256=_canonical_sha256(projection),
+        )
+
+    @model_validator(mode="after")
+    def validate_run(self) -> Self:
+        manifest = self.finalization.snapshot.manifest
+        if self.child.profile_id != self.profile_id or (
+            manifest is not None
+            and (
+                manifest.profile_id != self.profile_id
+                or manifest.child_id != self.child.child_id
+                or manifest.child_status is not self.child.status
+                or manifest.evidence_sha256 != self.child.result_sha256
+            )
+        ):
+            raise ValueError("Implementation run identity is inconsistent.")
+        projection = _implementation_run_projection(
+            profile_id=self.profile_id,
+            child=self.child,
+            finalization=self.finalization,
+            duration_ms=self.duration_ms,
+        )
+        if self.result_sha256 != _canonical_sha256(projection):
+            raise ValueError("Implementation run hash is inconsistent.")
+        return self
+
+
 def _normalize_relative_path(value: str, *, allow_trailing_slash: bool = False) -> str:
     if "\0" in value or "\\" in value:
         raise ValueError("Worktree paths must be NUL-free POSIX paths.")
@@ -638,4 +698,19 @@ def _candidate_manifest_projection(
         "profile_id": profile_id,
         "rejection_reasons": list(rejection_reasons),
         "repository_root": str(repository_root),
+    }
+
+
+def _implementation_run_projection(
+    *,
+    profile_id: str,
+    child: SubagentChildResult,
+    finalization: WorktreeFinalizationResult,
+    duration_ms: int,
+) -> dict[str, object]:
+    return {
+        "child": child.model_dump(mode="json"),
+        "duration_ms": duration_ms,
+        "finalization": finalization.model_dump(mode="json"),
+        "profile_id": profile_id,
     }
