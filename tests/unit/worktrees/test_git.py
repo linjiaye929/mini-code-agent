@@ -15,6 +15,7 @@ from mini_code_agent.worktrees.git import (
     WorktreeGitError,
     parse_batch_blobs,
     parse_index_pointers,
+    parse_worktree_paths,
 )
 from mini_code_agent.worktrees.models import WorktreeErrorCode
 from mini_code_agent.worktrees.state import WorktreeStateStore
@@ -170,6 +171,21 @@ def test_batch_blob_parser_validates_order_size_and_terminators() -> None:
         parse_batch_blobs(payload, (second.decode(), first.decode()), max_total_bytes=6)
     with pytest.raises(WorktreeGitError):
         parse_batch_blobs(payload, (first.decode(), second.decode()), max_total_bytes=5)
+
+
+def test_worktree_list_parser_extracts_absolute_unique_paths(tmp_path: Path) -> None:
+    first = (tmp_path / "first").resolve()
+    second = (tmp_path / "second").resolve()
+    payload = (
+        f"worktree {first}\0HEAD {'a' * 40}\0locked reason\0\0"
+        f"worktree {second}\0HEAD {'b' * 40}\0detached\0\0"
+    ).encode()
+
+    assert parse_worktree_paths(payload) == (first, second)
+    with pytest.raises(WorktreeGitError):
+        parse_worktree_paths(payload.rstrip(b"\0"))
+    with pytest.raises(WorktreeGitError):
+        parse_worktree_paths(f"worktree {first}\0worktree {first}\0".encode())
 
 
 @pytest.mark.asyncio

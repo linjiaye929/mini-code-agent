@@ -87,6 +87,11 @@ class SnapshotStatus(StrEnum):
     CLEANUP_REQUIRED = "cleanup_required"
 
 
+class CleanupStatus(StrEnum):
+    REMOVED = "removed"
+    CLEANUP_REQUIRED = "cleanup_required"
+
+
 class WorktreeLimits(BaseModel):
     model_config = ConfigDict(extra="forbid", frozen=True)
 
@@ -264,6 +269,7 @@ class WorktreeLease(BaseModel):
     repository_root: Path
     container_path: Path
     worktree_path: Path
+    git_admin_dir: Path
     base_sha: str = Field(pattern=_SHA1)
     base_manifest: BaseManifest
     state: WorktreeLeaseState
@@ -274,6 +280,7 @@ class WorktreeLease(BaseModel):
             not self.repository_root.is_absolute()
             or not self.container_path.is_absolute()
             or not self.worktree_path.is_absolute()
+            or not self.git_admin_dir.is_absolute()
             or self.worktree_path != self.container_path / "worktree"
             or self.container_path.name != self.lease_id
             or self.base_manifest.repository_root != self.repository_root
@@ -496,6 +503,27 @@ class SnapshotOutcome(BaseModel):
                 raise ValueError("Snapshot candidate outcome is inconsistent.")
         elif self.candidate_id is not None or self.manifest is not None:
             raise ValueError("Snapshot non-candidate outcome is inconsistent.")
+        return self
+
+
+class CleanupResult(BaseModel):
+    model_config = ConfigDict(extra="forbid", frozen=True)
+
+    lease_id: str = Field(pattern=_IDENTIFIER)
+    status: CleanupStatus
+
+
+class WorktreeFinalizationResult(BaseModel):
+    model_config = ConfigDict(extra="forbid", frozen=True)
+
+    lease_id: str = Field(pattern=_IDENTIFIER)
+    snapshot: SnapshotOutcome
+    cleanup: CleanupResult
+
+    @model_validator(mode="after")
+    def validate_lease_identity(self) -> Self:
+        if self.snapshot.lease_id != self.lease_id or self.cleanup.lease_id != self.lease_id:
+            raise ValueError("Worktree finalization lease identity is inconsistent.")
         return self
 
 

@@ -17,6 +17,37 @@ class MaterializationError(RuntimeError):
     pass
 
 
+def read_worktree_admin_dir(root: Path) -> Path:
+    git_file = root / ".git"
+    if _is_link_or_reparse(git_file):
+        raise MaterializationError("Worktree administrative file cannot be a link.")
+    try:
+        content = git_file.read_bytes()
+    except OSError:
+        raise MaterializationError("Worktree administrative file is unavailable.") from None
+    if (
+        not content.endswith(b"\n")
+        or content.count(b"\n") != 1
+        or len(content) > 4096
+        or not content.startswith(b"gitdir: ")
+    ):
+        raise MaterializationError("Worktree administrative file is invalid.")
+    try:
+        raw_path = content[len(b"gitdir: ") : -1].decode("utf-8")
+    except UnicodeDecodeError:
+        raise MaterializationError("Worktree administrative file is invalid.") from None
+    candidate = Path(raw_path)
+    if not candidate.is_absolute():
+        candidate = root / candidate
+    try:
+        resolved = candidate.resolve(strict=True)
+    except OSError:
+        raise MaterializationError("Worktree administrative directory is unavailable.") from None
+    if _is_link_or_reparse(resolved) or not resolved.is_dir():
+        raise MaterializationError("Worktree administrative directory is unsafe.")
+    return resolved
+
+
 def materialize_index(
     root: Path,
     pointers: tuple[GitIndexPointer, ...],
@@ -83,6 +114,7 @@ def _verify_initial_root(root: Path) -> Path:
             raise MaterializationError("Worktree administrative path is invalid.")
     except OSError:
         raise MaterializationError("Worktree administrative path is unavailable.") from None
+    read_worktree_admin_dir(resolved)
     return resolved
 
 

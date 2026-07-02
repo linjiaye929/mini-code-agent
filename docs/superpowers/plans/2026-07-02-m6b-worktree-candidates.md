@@ -129,12 +129,12 @@ hooks-empty/
 - Test: `tests/unit/worktrees/test_cancellation.py`
 - Test: `tests/integration/test_worktree_cleanup.py`
 
-- [ ] Write failing tests for exact lease/repository/admin identity checks before unlock/remove, bounded prune, and postcondition verification.
-- [ ] Permit manager-owned removal only after candidate persistence or a verified clean tree.
-- [ ] Prove dirty unsnapshotted and path-ambiguous leases are retained and marked `cleanup_required`.
-- [ ] Add bounded shielded snapshot/cleanup finalization on child cancellation, then re-raise `CancelledError`.
-- [ ] Record actionable diagnostics when cleanup exceeds its budget.
-- [ ] Commit: `feat: finalize worktree leases safely`
+- [x] Write failing tests for exact lease/repository/admin identity checks before unlock/remove, bounded prune, and postcondition verification.
+- [x] Permit manager-owned removal only after candidate persistence or a verified clean tree.
+- [x] Prove dirty unsnapshotted and path-ambiguous leases are retained and marked `cleanup_required`.
+- [x] Add bounded shielded snapshot/cleanup finalization on child cancellation, then re-raise `CancelledError`.
+- [x] Record actionable diagnostics when cleanup exceeds its budget.
+- [x] Commit: `feat: finalize worktree leases safely`
 
 ## Task 7: Expose Bounded Implementation Delegation
 

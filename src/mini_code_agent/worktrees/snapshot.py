@@ -5,6 +5,7 @@ import difflib
 import hashlib
 import os
 import stat
+from contextlib import suppress
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Literal, Protocol
@@ -216,8 +217,9 @@ class CandidateSnapshotter:
             target,
         )
 
-    @staticmethod
-    def _cleanup_required(lease: WorktreeLease) -> SnapshotOutcome:
+    def _cleanup_required(self, lease: WorktreeLease) -> SnapshotOutcome:
+        with suppress(WorktreeStateError):
+            self._store.record_cleanup_required(lease.lease_id, "snapshot_failed")
         return SnapshotOutcome(
             lease_id=lease.lease_id,
             status=SnapshotStatus.CLEANUP_REQUIRED,
@@ -284,6 +286,17 @@ def _scan_worktree(
         changed_content=tuple(sorted(changed_content, key=lambda item: item.observed.path)),
         reasons=tuple(sorted(reasons)),
     )
+
+
+def verify_lease_base_clean(
+    profile: WorktreeProfile,
+    lease: WorktreeLease,
+) -> bool:
+    try:
+        scan = _scan_worktree(profile, lease, MutationLedger(max_entries=1))
+    except SnapshotUnsafeError:
+        return False
+    return not scan.observed_paths
 
 
 def _walk_regular_files(

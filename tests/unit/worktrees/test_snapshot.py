@@ -49,7 +49,9 @@ def lease_for(
     store.initialize()
     paths = store.begin_lease("lease-1")
     paths.worktree.mkdir()
-    (paths.worktree / ".git").write_text("gitdir: admin\n", encoding="utf-8")
+    admin = paths.container / "admin"
+    admin.mkdir()
+    (paths.worktree / ".git").write_bytes(f"gitdir: {admin}\n".encode())
     base_files = files or {"src/app.py": b"print('base')\n"}
     blobs: dict[str, bytes] = {}
     entries: list[GitIndexEntry] = []
@@ -79,6 +81,7 @@ def lease_for(
         repository_root=profile.repository_root,
         container_path=paths.container,
         worktree_path=paths.worktree,
+        git_admin_dir=admin,
         base_sha="a" * 40,
         base_manifest=manifest,
         state=WorktreeLeaseState.ACTIVE,

@@ -16,7 +16,12 @@ from mini_code_agent.workspace.boundary import WorkspaceBoundary
 from mini_code_agent.worktrees.git import WorktreeGit
 from mini_code_agent.worktrees.ledger import MutationLedger
 from mini_code_agent.worktrees.manager import WorktreeManager
-from mini_code_agent.worktrees.models import SnapshotStatus, WorktreeProfile
+from mini_code_agent.worktrees.models import (
+    CleanupStatus,
+    SnapshotOutcome,
+    SnapshotStatus,
+    WorktreeProfile,
+)
 from mini_code_agent.worktrees.snapshot import CandidateSnapshotter
 from mini_code_agent.worktrees.state import WorktreeStateStore
 
@@ -74,9 +79,14 @@ async def test_real_no_checkout_lease_materializes_only_tracked_index(
     assert not (lease.worktree_path / ".env").exists()
     assert not (lease.worktree_path / ".venv").exists()
     assert not (lease.worktree_path / "cache").exists()
-    await git.unlock_worktree(lease.worktree_path)
-    await git.remove_worktree(lease.worktree_path)
-    await git.prune_worktrees()
+    cleanup = await manager.cleanup_lease(
+        lease,
+        SnapshotOutcome(
+            lease_id=lease.lease_id,
+            status=SnapshotStatus.NO_CHANGES,
+        ),
+    )
+    assert cleanup.status is CleanupStatus.REMOVED
 
 
 @pytest.mark.asyncio
@@ -154,9 +164,8 @@ async def test_real_lease_snapshot_persists_candidate_without_parent_mutation(
     assert (repository / "src" / "app.py").read_bytes() == parent_content
     assert not (repository / "src" / "new.py").exists()
     assert (state / "candidates" / "ready" / "candidate-real" / "manifest.json").is_file()
-    await git.unlock_worktree(lease.worktree_path)
-    await git.remove_worktree(lease.worktree_path)
-    await git.prune_worktrees()
+    cleanup = await manager.cleanup_lease(lease, outcome)
+    assert cleanup.status is CleanupStatus.REMOVED
 
 
 def _profile(repository: Path, state: Path, git_executable: Path) -> WorktreeProfile:

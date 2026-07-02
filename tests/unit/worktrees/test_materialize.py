@@ -25,7 +25,9 @@ def pointer(
 def test_materializer_writes_raw_blobs_and_regular_modes(tmp_path: Path) -> None:
     root = tmp_path / "worktree"
     root.mkdir()
-    (root / ".git").write_text("gitdir: admin\n", encoding="utf-8")
+    admin = tmp_path / "admin"
+    admin.mkdir()
+    (root / ".git").write_bytes(f"gitdir: {admin}\n".encode())
     script = b"#!/usr/bin/env python\nprint('ok')\r\n"
     binary = b"\x00\xffraw"
     pointers = (
@@ -82,7 +84,9 @@ def test_materializer_rejects_missing_blobs_or_budget_excess(
 ) -> None:
     root = tmp_path / "worktree"
     root.mkdir()
-    (root / ".git").write_text("gitdir: admin\n", encoding="utf-8")
+    admin = tmp_path / "admin"
+    admin.mkdir()
+    (root / ".git").write_bytes(f"gitdir: {admin}\n".encode())
 
     with pytest.raises(MaterializationError):
         materialize_index(root, pointers, blobs, limits=limits)
@@ -93,7 +97,9 @@ def test_materializer_rejects_unexpected_or_linked_worktree_content(
 ) -> None:
     root = tmp_path / "worktree"
     root.mkdir()
-    (root / ".git").write_text("gitdir: admin\n", encoding="utf-8")
+    admin = tmp_path / "admin"
+    admin.mkdir()
+    (root / ".git").write_bytes(f"gitdir: {admin}\n".encode())
     (root / "unexpected").write_text("unsafe", encoding="utf-8")
 
     with pytest.raises(MaterializationError):
@@ -111,7 +117,9 @@ def test_materializer_rejects_parent_directory_swap_to_link(
 ) -> None:
     root = tmp_path / "worktree"
     root.mkdir()
-    (root / ".git").write_text("gitdir: admin\n", encoding="utf-8")
+    admin = tmp_path / "admin"
+    admin.mkdir()
+    (root / ".git").write_bytes(f"gitdir: {admin}\n".encode())
 
     def marks_src_as_link(path: Path) -> bool:
         return path.name == "src"

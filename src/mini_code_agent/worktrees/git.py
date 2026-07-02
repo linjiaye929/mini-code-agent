@@ -120,7 +120,9 @@ class GitBytesRunner:
                 timed_out = True
                 await self._terminate_tree(process)
             elif output_wait in done and output_wait.result():
-                await self._terminate_tree(process)
+                exited, _ = await asyncio.wait((process_wait,), timeout=0.1)
+                if not exited:
+                    await self._terminate_tree(process)
             else:
                 process_wait.result()
             await asyncio.gather(writer, *readers)
@@ -367,6 +369,23 @@ class WorktreeGit:
             max_output_bytes=1024 * 1024,
         )
 
+    async def lock_worktree(self, path: Path, lease_id: str) -> None:
+        self._validate_lease_worktree_path(
+            path,
+            lease_id=lease_id,
+            require_exists=True,
+        )
+        await self._execute(
+            (
+                "worktree",
+                "lock",
+                "--reason",
+                f"mini-code-agent:{lease_id}",
+                str(path),
+            ),
+            max_output_bytes=1024 * 1024,
+        )
+
     async def remove_worktree(self, path: Path) -> None:
         self._validate_lease_worktree_path(path, require_exists=True)
         await self._execute(
@@ -385,6 +404,9 @@ class WorktreeGit:
             ("worktree", "list", "--porcelain", "-z"),
             max_output_bytes=16 * 1024 * 1024,
         )
+
+    async def worktree_paths(self) -> tuple[Path, ...]:
+        return parse_worktree_paths(await self.worktree_list())
 
     def _validate_lease_worktree_path(
         self,
@@ -535,6 +557,31 @@ def parse_batch_blobs(
     if position != len(output) or len(blobs) != len(object_ids):
         raise _invalid_git_output()
     return blobs
+
+
+def parse_worktree_paths(output: bytes) -> tuple[Path, ...]:
+    if output and not output.endswith(b"\0"):
+        raise _invalid_git_output()
+    paths: list[Path] = []
+    identities: set[str] = set()
+    for record in output[:-1].split(b"\0") if output else ():
+        if not record:
+            continue
+        if not record.startswith(b"worktree "):
+            continue
+        try:
+            raw_path = record[len(b"worktree ") :].decode("utf-8")
+            path = Path(raw_path)
+        except UnicodeDecodeError:
+            raise _invalid_git_output() from None
+        if not path.is_absolute():
+            raise _invalid_git_output()
+        identity = os.path.normcase(str(path))
+        if identity in identities:
+            raise _invalid_git_output()
+        identities.add(identity)
+        paths.append(path)
+    return tuple(paths)
 
 
 def _decode_lines(output: bytes) -> list[str]:

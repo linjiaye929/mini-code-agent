@@ -10,7 +10,14 @@ from contextlib import suppress
 from dataclasses import dataclass
 from pathlib import Path
 
-from mini_code_agent.worktrees.models import CandidateState, WorktreeProfile
+from pydantic import ValidationError
+
+from mini_code_agent.worktrees.models import (
+    CandidateDisposition,
+    CandidateManifest,
+    CandidateState,
+    WorktreeProfile,
+)
 
 _IDENTIFIER = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._-]{0,95}$")
 _SHA256 = re.compile(r"^[0-9a-f]{64}$")
@@ -194,6 +201,142 @@ class WorktreeStateStore:
         self._verify_directory(target_path)
         return target_path
 
+    def load_candidate(
+        self,
+        state: CandidateState,
+        candidate_id: str,
+    ) -> CandidateManifest:
+        self._validate_identifier(candidate_id)
+        self._verify_layout()
+        candidate = self._candidate_path(state, candidate_id)
+        self._verify_directory(candidate)
+        try:
+            candidate_children = {path.name for path in candidate.iterdir()}
+        except OSError:
+            raise WorktreeStateError("Candidate directory could not be listed.") from None
+        if candidate_children != {"manifest.json", "blobs"}:
+            raise WorktreeStateError("Candidate directory contains unexpected paths.")
+        manifest_path = candidate / "manifest.json"
+        if _is_link_or_reparse(manifest_path):
+            raise WorktreeStateError("Candidate manifest is unsafe.")
+        try:
+            if manifest_path.stat(follow_symlinks=False).st_size > 16 * 1024 * 1024:
+                raise WorktreeStateError("Candidate manifest exceeds its limit.")
+            manifest = CandidateManifest.model_validate_json(manifest_path.read_bytes())
+        except WorktreeStateError:
+            raise
+        except (OSError, ValidationError, ValueError):
+            raise WorktreeStateError("Candidate manifest is invalid.") from None
+        expected_disposition = {
+            CandidateState.READY: CandidateDisposition.READY,
+            CandidateState.REJECTED: CandidateDisposition.REJECTED,
+            CandidateState.APPLYING: CandidateDisposition.READY,
+            CandidateState.APPLIED: CandidateDisposition.READY,
+            CandidateState.UNCERTAIN: CandidateDisposition.READY,
+        }.get(state)
+        if (
+            manifest.candidate_id != candidate_id
+            or expected_disposition is None
+            or manifest.disposition is not expected_disposition
+            or manifest.repository_root != self._profile.repository_root
+            or manifest.profile_id != self._profile.implementation_profile.profile_id
+            or manifest.changed_files > self._profile.limits.max_candidate_files
+            or manifest.after_content_bytes > self._profile.limits.max_candidate_after_bytes
+            or (
+                state is not CandidateState.REJECTED
+                and any(
+                    not _is_allowed_candidate_path(
+                        path,
+                        self._profile.allowed_path_prefixes,
+                    )
+                    for path in manifest.observed_paths
+                )
+            )
+        ):
+            raise WorktreeStateError("Candidate state and manifest do not match.")
+        blobs = candidate / "blobs"
+        self._verify_directory(blobs)
+        expected_hashes = {item.content_blob_sha256 for item in manifest.files}
+        try:
+            actual = tuple(blobs.iterdir())
+        except OSError:
+            raise WorktreeStateError("Candidate blobs could not be listed.") from None
+        if {path.name for path in actual} != expected_hashes:
+            raise WorktreeStateError("Candidate blob set is invalid.")
+        for path in actual:
+            if _is_link_or_reparse(path):
+                raise WorktreeStateError("Candidate blob is unsafe.")
+            try:
+                content = path.read_bytes()
+            except OSError:
+                raise WorktreeStateError("Candidate blob could not be read.") from None
+            if (
+                len(content) > self._profile.limits.max_file_bytes
+                or hashlib.sha256(content).hexdigest() != path.name
+            ):
+                raise WorktreeStateError("Candidate blob hash is invalid.")
+        return manifest
+
+    def complete_lease(self, lease_id: str) -> None:
+        self._validate_identifier(lease_id)
+        leases = self._root / "leases"
+        self._verify_directory(leases)
+        container = leases / lease_id
+        self._verify_directory(container)
+        if (container / "worktree").exists():
+            raise WorktreeStateError("Active Worktree lease cannot be completed.")
+        try:
+            children = tuple(container.iterdir())
+        except OSError:
+            raise WorktreeStateError("Lease state could not be listed.") from None
+        allowed = {"base-manifest.json", "lease.json", "cleanup-required.json"}
+        if any(child.name not in allowed for child in children):
+            raise WorktreeStateError("Lease state contains unexpected paths.")
+        for child in children:
+            if _is_link_or_reparse(child):
+                raise WorktreeStateError("Lease metadata is unsafe.")
+            try:
+                if not stat.S_ISREG(child.stat(follow_symlinks=False).st_mode):
+                    raise WorktreeStateError("Lease metadata is not a regular file.")
+                child.unlink()
+            except WorktreeStateError:
+                raise
+            except OSError:
+                raise WorktreeStateError("Lease metadata could not be removed.") from None
+        try:
+            container.rmdir()
+        except OSError:
+            raise WorktreeStateError("Lease directory could not be removed.") from None
+
+    def record_cleanup_required(self, lease_id: str, stage: str) -> None:
+        self._validate_identifier(lease_id)
+        if stage not in {
+            "snapshot_failed",
+            "cleanup_failed",
+            "cancellation_timeout",
+            "creation_failed",
+        }:
+            raise WorktreeStateError("Cleanup diagnostic stage is invalid.")
+        container = self._root / "leases" / lease_id
+        self._verify_directory(container)
+        target = container / "cleanup-required.json"
+        if target.exists():
+            return
+        payload = (
+            json.dumps(
+                {
+                    "lease_id": lease_id,
+                    "stage": stage,
+                    "status": "cleanup_required",
+                },
+                ensure_ascii=True,
+                separators=(",", ":"),
+                sort_keys=True,
+            )
+            + "\n"
+        ).encode("ascii")
+        self._publish_immutable(target, payload)
+
     def _building_candidate(self, candidate_id: str) -> Path:
         self._validate_identifier(candidate_id)
         self._verify_layout()
@@ -290,3 +433,7 @@ def _fsync_directory(path: Path) -> None:
         os.fsync(descriptor)
     finally:
         os.close(descriptor)
+
+
+def _is_allowed_candidate_path(path: str, prefixes: tuple[str, ...]) -> bool:
+    return any(path == prefix or path.startswith(f"{prefix}/") for prefix in prefixes)
