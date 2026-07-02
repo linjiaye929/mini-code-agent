@@ -90,6 +90,26 @@ def test_validate_child_tools_accepts_exact_governed_subagent_contract() -> None
     validate_child_tools(profile_for(), valid_tools())
 
 
+def test_read_only_validator_does_not_grant_implementation_write_authority() -> None:
+    profile = SubagentProfile.model_validate(
+        profile_for().model_dump()
+        | {
+            "mode": "implementation",
+            "local_name": "delegate_implementation",
+            "tool_names": ("read_file", "write_file"),
+        }
+    )
+    tools = StubTools(
+        (
+            definition("read_file"),
+            definition("write_file", side_effect=SideEffect.WRITE),
+        )
+    )
+
+    with pytest.raises(SubagentCompositionError):
+        validate_child_tools(profile, tools)
+
+
 @pytest.mark.parametrize(
     "tools",
     [

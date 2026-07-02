@@ -275,7 +275,7 @@ class MutationLedgerEntry(BaseModel):
     model_config = ConfigDict(extra="forbid", frozen=True)
 
     ordinal: int = Field(ge=0, le=127)
-    tool_call_id: str = Field(pattern=_IDENTIFIER)
+    tool_call_id: str = Field(min_length=1, max_length=128)
     tool_name: Literal["write_file", "edit_file"]
     path: RelativePath
     created: bool
@@ -288,6 +288,13 @@ class MutationLedgerEntry(BaseModel):
     @classmethod
     def validate_path(cls, value: str) -> str:
         return _normalize_relative_path(value)
+
+    @field_validator("tool_call_id")
+    @classmethod
+    def reject_nul_call_id(cls, value: str) -> str:
+        if "\0" in value:
+            raise ValueError("Mutation ToolCall identifier cannot contain NUL.")
+        return value
 
     @model_validator(mode="after")
     def validate_hashes(self) -> Self:
