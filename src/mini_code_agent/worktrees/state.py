@@ -7,6 +7,7 @@ import re
 import stat
 import tempfile
 from contextlib import suppress
+from dataclasses import dataclass
 from pathlib import Path
 
 from mini_code_agent.worktrees.models import CandidateState, WorktreeProfile
@@ -18,6 +19,12 @@ _CANDIDATE_ROOT = "candidates"
 
 class WorktreeStateError(RuntimeError):
     pass
+
+
+@dataclass(frozen=True, slots=True)
+class LeasePaths:
+    container: Path
+    worktree: Path
 
 
 class WorktreeStateStore:
@@ -51,6 +58,74 @@ class WorktreeStateStore:
         self._verify_directory(path)
         self._ensure_managed_directory(path / "blobs")
         return path
+
+    def active_lease_ids(self) -> tuple[str, ...]:
+        leases = self._root / "leases"
+        self._verify_directory(leases)
+        identifiers: list[str] = []
+        try:
+            children = tuple(leases.iterdir())
+        except OSError:
+            raise WorktreeStateError("Lease state could not be listed.") from None
+        for child in children:
+            self._validate_identifier(child.name)
+            self._verify_directory(child)
+            identifiers.append(child.name)
+        return tuple(sorted(identifiers))
+
+    def begin_lease(self, lease_id: str) -> LeasePaths:
+        self._validate_identifier(lease_id)
+        self._verify_directory(self._root / "leases")
+        container = self._root / "leases" / lease_id
+        try:
+            container.mkdir(mode=0o700)
+            if os.name != "nt":
+                container.chmod(0o700)
+        except OSError:
+            raise WorktreeStateError("Lease directory could not be created.") from None
+        self._verify_directory(container)
+        return LeasePaths(container=container, worktree=container / "worktree")
+
+    def write_lease_json(
+        self,
+        lease_id: str,
+        filename: str,
+        payload: object,
+    ) -> Path:
+        self._validate_identifier(lease_id)
+        if filename not in {"base-manifest.json", "lease.json"}:
+            raise WorktreeStateError("Lease JSON filename is invalid.")
+        container = self._root / "leases" / lease_id
+        self._verify_directory(container)
+        try:
+            encoded = (
+                json.dumps(
+                    payload,
+                    ensure_ascii=True,
+                    allow_nan=False,
+                    separators=(",", ":"),
+                    sort_keys=True,
+                )
+                + "\n"
+            ).encode("utf-8")
+        except (TypeError, ValueError):
+            raise WorktreeStateError("Lease JSON payload is invalid.") from None
+        target = container / filename
+        self._publish_immutable(target, encoded)
+        return target
+
+    def abandon_empty_lease(self, lease_id: str) -> None:
+        self._validate_identifier(lease_id)
+        container = self._root / "leases" / lease_id
+        self._verify_directory(container)
+        try:
+            if any(container.iterdir()):
+                raise WorktreeStateError("Non-empty lease cannot be abandoned.")
+            container.rmdir()
+        except WorktreeStateError:
+            raise
+        except OSError:
+            raise WorktreeStateError("Empty lease could not be abandoned.") from None
 
     def write_candidate_json(
         self,

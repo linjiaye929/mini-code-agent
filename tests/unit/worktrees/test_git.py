@@ -82,6 +82,43 @@ async def test_git_revalidates_executable_before_every_command(tmp_path: Path) -
     assert runner.commands == []
 
 
+@pytest.mark.asyncio
+async def test_git_worktree_mutations_require_exact_host_lease_path(
+    tmp_path: Path,
+) -> None:
+    profile = worktree_profile(tmp_path)
+    store = WorktreeStateStore(profile)
+    store.initialize()
+    paths = store.begin_lease("lease-1")
+    runner = RecordingRunner(result())
+    git = WorktreeGit(profile, runner=runner)
+
+    await git.add_worktree("lease-1", paths.worktree, "a" * 40)
+
+    assert runner.commands[0].argv[-9:] == (
+        "worktree",
+        "add",
+        "--detach",
+        "--no-checkout",
+        "--lock",
+        "--reason",
+        "mini-code-agent:lease-1",
+        str(paths.worktree),
+        "a" * 40,
+    )
+    with pytest.raises(WorktreeGitError):
+        await git.add_worktree("other", paths.worktree, "a" * 40)
+    with pytest.raises(WorktreeGitError):
+        await git.add_worktree(
+            "lease-1",
+            tmp_path / "outside" / "worktree",
+            "a" * 40,
+        )
+    with pytest.raises(WorktreeGitError):
+        await git.add_worktree("lease-1", paths.worktree, "invalid")
+    assert len(runner.commands) == 1
+
+
 @pytest.mark.parametrize(
     "payload",
     [

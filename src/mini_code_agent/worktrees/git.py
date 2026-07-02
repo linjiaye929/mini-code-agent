@@ -24,6 +24,7 @@ from mini_code_agent.worktrees.models import (
 _INDEX_HEADER = re.compile(rb"^(100644|100755) ([0-9a-f]{40}) ([0-3])\t")
 _BATCH_HEADER = re.compile(rb"^([0-9a-f]{40}) blob ([0-9]+)$")
 _SHA1 = re.compile(r"^[0-9a-f]{40}$")
+_IDENTIFIER = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._-]{0,95}$")
 _READ_CHUNK_BYTES = 64 * 1024
 
 
@@ -341,6 +342,9 @@ class WorktreeGit:
         )
 
     async def add_worktree(self, lease_id: str, path: Path, base_sha: str) -> None:
+        self._validate_lease_worktree_path(path, lease_id=lease_id, require_exists=False)
+        if _SHA1.fullmatch(base_sha) is None:
+            raise _invalid_git_output()
         await self._execute(
             (
                 "worktree",
@@ -357,12 +361,14 @@ class WorktreeGit:
         )
 
     async def unlock_worktree(self, path: Path) -> None:
+        self._validate_lease_worktree_path(path, require_exists=True)
         await self._execute(
             ("worktree", "unlock", str(path)),
             max_output_bytes=1024 * 1024,
         )
 
     async def remove_worktree(self, path: Path) -> None:
+        self._validate_lease_worktree_path(path, require_exists=True)
         await self._execute(
             ("worktree", "remove", "--force", str(path)),
             max_output_bytes=1024 * 1024,
@@ -379,6 +385,35 @@ class WorktreeGit:
             ("worktree", "list", "--porcelain", "-z"),
             max_output_bytes=16 * 1024 * 1024,
         )
+
+    def _validate_lease_worktree_path(
+        self,
+        path: Path,
+        *,
+        lease_id: str | None = None,
+        require_exists: bool,
+    ) -> None:
+        if not path.is_absolute() or path.name != "worktree":
+            raise _invalid_git_output()
+        container = path.parent
+        expected_lease_root = self._profile.state_root / "leases"
+        if (
+            _IDENTIFIER.fullmatch(container.name) is None
+            or (lease_id is not None and container.name != lease_id)
+            or not container.is_dir()
+            or _is_link_or_reparse(container)
+            or _is_link_or_reparse(expected_lease_root)
+        ):
+            raise _invalid_git_output()
+        try:
+            if container.parent.resolve(strict=True) != expected_lease_root.resolve(strict=True):
+                raise _invalid_git_output()
+            if require_exists and path.resolve(strict=True) != path:
+                raise _invalid_git_output()
+        except OSError:
+            raise _invalid_git_output() from None
+        if require_exists and (_is_link_or_reparse(path) or not path.is_dir()):
+            raise _invalid_git_output()
 
     async def _execute(
         self,
@@ -528,6 +563,18 @@ def _is_regular_unlinked_file(path: Path) -> bool:
         and not stat.S_ISLNK(metadata.st_mode)
         and not (attributes & reparse_flag)
     )
+
+
+def _is_link_or_reparse(path: Path) -> bool:
+    try:
+        metadata = path.lstat()
+    except FileNotFoundError:
+        return False
+    except OSError:
+        return True
+    attributes = getattr(metadata, "st_file_attributes", 0)
+    reparse_flag = getattr(stat, "FILE_ATTRIBUTE_REPARSE_POINT", 0)
+    return stat.S_ISLNK(metadata.st_mode) or bool(attributes & reparse_flag)
 
 
 def _invalid_git_output() -> WorktreeGitError:

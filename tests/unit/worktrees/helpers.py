@@ -5,10 +5,15 @@ from pathlib import Path
 
 from mini_code_agent.agent.models import AgentLimits
 from mini_code_agent.subagents.models import SubagentProfile
-from mini_code_agent.worktrees.models import WorktreeProfile
+from mini_code_agent.worktrees.models import WorktreeLimits, WorktreeProfile
 
 
-def worktree_profile(tmp_path: Path, *, git_executable: Path | None = None) -> WorktreeProfile:
+def worktree_profile(
+    tmp_path: Path,
+    *,
+    git_executable: Path | None = None,
+    limits: WorktreeLimits | None = None,
+) -> WorktreeProfile:
     repository = tmp_path / "repository"
     state = tmp_path / "state"
     executable = git_executable or tmp_path / ("git.exe" if os.name == "nt" else "git")
@@ -34,4 +39,5 @@ def worktree_profile(tmp_path: Path, *, git_executable: Path | None = None) -> W
             mode="implementation",
             agent_limits=AgentLimits(max_turns=8, max_tool_calls=32),
         ),
+        limits=limits or WorktreeLimits(),
     )

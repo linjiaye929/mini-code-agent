@@ -1,6 +1,7 @@
 """Governed worktree leases and independently verified candidates."""
 
 from mini_code_agent.worktrees.models import (
+    BaseManifest,
     CandidateFile,
     CandidateOperation,
     CandidateState,
@@ -9,12 +10,14 @@ from mini_code_agent.worktrees.models import (
     MutationLedgerEntry,
     WorktreeError,
     WorktreeErrorCode,
+    WorktreeLease,
     WorktreeLeaseState,
     WorktreeLimits,
     WorktreeProfile,
 )
 
 __all__ = [
+    "BaseManifest",
     "CandidateFile",
     "CandidateOperation",
     "CandidateState",
@@ -23,6 +26,7 @@ __all__ = [
     "MutationLedgerEntry",
     "WorktreeError",
     "WorktreeErrorCode",
+    "WorktreeLease",
     "WorktreeLeaseState",
     "WorktreeLimits",
     "WorktreeProfile",

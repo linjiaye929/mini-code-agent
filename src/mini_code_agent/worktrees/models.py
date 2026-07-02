@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import hashlib
+import json
 import os
 import stat
 from enum import StrEnum
@@ -184,6 +186,91 @@ class GitIndexPointer(BaseModel):
         return _normalize_relative_path(value)
 
 
+class BaseManifest(BaseModel):
+    model_config = ConfigDict(extra="forbid", frozen=True)
+
+    repository_root: Path
+    base_sha: str = Field(pattern=_SHA1)
+    entries: tuple[GitIndexEntry, ...] = Field(max_length=20_000)
+    tracked_files: int = Field(ge=0, le=20_000)
+    tracked_bytes: int = Field(ge=0, le=_MAX_TRACKED_BYTES)
+    manifest_sha256: Sha256
+
+    @classmethod
+    def from_entries(
+        cls,
+        *,
+        repository_root: Path,
+        base_sha: str,
+        entries: tuple[GitIndexEntry, ...],
+    ) -> Self:
+        tracked_files = len(entries)
+        tracked_bytes = sum(entry.byte_count for entry in entries)
+        projection = _base_manifest_projection(
+            repository_root=repository_root,
+            base_sha=base_sha,
+            entries=entries,
+            tracked_files=tracked_files,
+            tracked_bytes=tracked_bytes,
+        )
+        return cls(
+            repository_root=repository_root,
+            base_sha=base_sha,
+            entries=entries,
+            tracked_files=tracked_files,
+            tracked_bytes=tracked_bytes,
+            manifest_sha256=_canonical_sha256(projection),
+        )
+
+    @model_validator(mode="after")
+    def validate_projection(self) -> Self:
+        if tuple(sorted(self.entries, key=lambda entry: entry.path)) != self.entries:
+            raise ValueError("Base manifest entries must be in canonical path order.")
+        if len({entry.path.casefold() for entry in self.entries}) != len(self.entries):
+            raise ValueError("Base manifest paths must be case-insensitively unique.")
+        if self.tracked_files != len(self.entries) or self.tracked_bytes != sum(
+            entry.byte_count for entry in self.entries
+        ):
+            raise ValueError("Base manifest counts are inconsistent.")
+        projection = _base_manifest_projection(
+            repository_root=self.repository_root,
+            base_sha=self.base_sha,
+            entries=self.entries,
+            tracked_files=self.tracked_files,
+            tracked_bytes=self.tracked_bytes,
+        )
+        if self.manifest_sha256 != _canonical_sha256(projection):
+            raise ValueError("Base manifest hash is inconsistent.")
+        return self
+
+
+class WorktreeLease(BaseModel):
+    model_config = ConfigDict(extra="forbid", frozen=True)
+
+    lease_id: str = Field(pattern=_IDENTIFIER)
+    child_id: str = Field(pattern=_IDENTIFIER)
+    repository_root: Path
+    container_path: Path
+    worktree_path: Path
+    base_sha: str = Field(pattern=_SHA1)
+    base_manifest: BaseManifest
+    state: WorktreeLeaseState
+
+    @model_validator(mode="after")
+    def validate_paths_and_base(self) -> Self:
+        if (
+            not self.repository_root.is_absolute()
+            or not self.container_path.is_absolute()
+            or not self.worktree_path.is_absolute()
+            or self.worktree_path != self.container_path / "worktree"
+            or self.container_path.name != self.lease_id
+            or self.base_manifest.repository_root != self.repository_root
+            or self.base_manifest.base_sha != self.base_sha
+        ):
+            raise ValueError("Worktree lease identity is inconsistent.")
+        return self
+
+
 class MutationLedgerEntry(BaseModel):
     model_config = ConfigDict(extra="forbid", frozen=True)
 
@@ -289,3 +376,31 @@ def _validate_secure_state_ancestors(state_root: Path) -> None:
         mode = state_root.stat(follow_symlinks=False).st_mode
         if mode & (stat.S_IRWXG | stat.S_IRWXO):
             raise ValueError("State root must exclude group and other access.")
+
+
+def _base_manifest_projection(
+    *,
+    repository_root: Path,
+    base_sha: str,
+    entries: tuple[GitIndexEntry, ...],
+    tracked_files: int,
+    tracked_bytes: int,
+) -> dict[str, object]:
+    return {
+        "base_sha": base_sha,
+        "entries": [entry.model_dump(mode="json") for entry in entries],
+        "repository_root": str(repository_root),
+        "tracked_bytes": tracked_bytes,
+        "tracked_files": tracked_files,
+    }
+
+
+def _canonical_sha256(value: object) -> str:
+    encoded = json.dumps(
+        value,
+        ensure_ascii=True,
+        allow_nan=False,
+        separators=(",", ":"),
+        sort_keys=True,
+    ).encode("utf-8")
+    return hashlib.sha256(encoded).hexdigest()
