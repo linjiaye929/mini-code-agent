@@ -1,5 +1,7 @@
 # Governed File Writes
 
+[English](governed-writes.md) | [简体中文](governed-writes.zh-CN.md)
+
 ## Execution Flow
 
 ```text

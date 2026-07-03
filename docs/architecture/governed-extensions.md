@@ -1,5 +1,7 @@
 # Governed Skills and Tool Hooks
 
+[English](governed-extensions.md) | [简体中文](governed-extensions.zh-CN.md)
+
 ## Purpose
 
 M5a adds two extension surfaces while keeping authority in host code:

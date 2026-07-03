@@ -1,5 +1,7 @@
 # Governed Test Execution
 
+[English](governed-test-execution.md) | [简体中文](governed-test-execution.zh-CN.md)
+
 ## Purpose
 
 M4b adds a narrow test-execution capability for Agent verification. It does not expose another

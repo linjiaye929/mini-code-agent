@@ -1,5 +1,7 @@
 # Hardened Read-only Git Evidence
 
+[English](readonly-git.md) | [简体中文](readonly-git.zh-CN.md)
+
 ## Purpose
 
 M4a lets the Agent inspect repository state without granting Git mutation. `git_status` returns a
@@ -88,4 +90,3 @@ repository content, or raw exception.
 - SHA-256 identifies returned evidence; it is not a signature.
 - M4a does not stage, commit, reset, clean, checkout, fetch, push, or repair.
 - Disabling known extension points does not make arbitrary future Git commands safe by default.
-

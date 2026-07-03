@@ -1,5 +1,7 @@
 # Governed Worktree Candidates
 
+[English](governed-worktree-candidates.md) | [简体中文](governed-worktree-candidates.zh-CN.md)
+
 ## Purpose and Scope
 
 M6b lets a parent Agent delegate one bounded implementation task without allowing the child to

@@ -1,5 +1,7 @@
 # Threat Model
 
+[English](threat-model.md) | [简体中文](threat-model.zh-CN.md)
+
 ## Protected Assets
 
 - User source code and uncommitted changes.

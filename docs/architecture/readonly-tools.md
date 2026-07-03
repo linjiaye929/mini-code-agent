@@ -1,5 +1,7 @@
 # Read-only Workspace Tools
 
+[English](readonly-tools.md) | [简体中文](readonly-tools.zh-CN.md)
+
 ## Data Flow
 
 ```text

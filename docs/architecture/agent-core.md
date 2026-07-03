@@ -1,5 +1,7 @@
 # Agent Core
 
+[English](agent-core.md) | [简体中文](agent-core.zh-CN.md)
+
 ## State Machine
 
 `AgentRuntime` owns a bounded sequence:

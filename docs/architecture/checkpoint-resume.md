@@ -1,5 +1,7 @@
 # Durable Checkpoint and Safe Resume
 
+[English](checkpoint-resume.md) | [简体中文](checkpoint-resume.zh-CN.md)
+
 ## Purpose
 
 M3c persists stable Agent input state and restores an interrupted Session without silently
@@ -102,4 +104,3 @@ M3c does not provide:
 - automatic reconciliation of blocked side effects;
 - exactly-once Provider billing or external Tool execution;
 - an OS sandbox.
-

@@ -1,5 +1,7 @@
 # Governed MCP Stdio
 
+[English](governed-mcp.md) | [简体中文](governed-mcp.zh-CN.md)
+
 ## Purpose
 
 M5b connects explicitly approved local MCP servers without allowing MCP discovery to create Agent

@@ -1,5 +1,7 @@
 # Bounded Repair Loop
 
+[English](bounded-repair-loop.md) | [简体中文](bounded-repair-loop.zh-CN.md)
+
 ## Purpose
 
 M4c adds a host-controlled feedback loop above the ordinary Agent runtime:

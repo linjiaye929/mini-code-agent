@@ -1,5 +1,7 @@
 # Versioned Session and Append-Only Trace
 
+[English](session-trace.md) | [简体中文](session-trace.zh-CN.md)
+
 ## Purpose
 
 M3b persists bounded Agent lifecycle metadata after process exit. It provides:

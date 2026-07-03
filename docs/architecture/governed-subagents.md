@@ -1,5 +1,7 @@
 # Governed Analysis Subagents
 
+[English](governed-subagents.md) | [简体中文](governed-subagents.zh-CN.md)
+
 ## Purpose and Scope
 
 M6a lets one parent Agent delegate one to four independent analysis tasks without giving child

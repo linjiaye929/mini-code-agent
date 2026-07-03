@@ -1,5 +1,7 @@
 # Mini CodeAgent
 
+[English](README.md) | [简体中文](README.zh-CN.md)
+
 A framework-light, provider-neutral coding agent built from first principles.
 
 > Status: pre-alpha. M8 provides a provider-neutral Agent Core, Anthropic/OpenAI-compatible
@@ -342,12 +344,15 @@ claim token/latency improvements. See
 
 ## Documentation
 
+- Chinese documentation: `README.zh-CN.md`
 - Product design: `docs/superpowers/specs/2026-06-29-mini-code-agent-design.md`
 - Learning map: `docs/learning/knowledge-map.md`
 - Learning evidence: `docs/learning/progress.md`
 - M7 CLI learning notes: `docs/learning/m7-cli-provider-runtime.md`
+- M8 Web console learning notes: `docs/learning/m8-web-console.md`
 - Resume evidence: `docs/resume/project-profile.md`
 - M7 resume and interview profile: `docs/resume/m7-cli-project-profile.md`
+- M8 resume and interview profile: `docs/resume/m8-web-console-profile.md`
 - Agent Core: `docs/architecture/agent-core.md`
 - Provider adapters: `docs/architecture/provider-adapters.md`
 - Read-only tools: `docs/architecture/readonly-tools.md`

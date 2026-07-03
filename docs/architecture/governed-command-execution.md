@@ -1,5 +1,7 @@
 # Governed Command Execution
 
+[English](governed-command-execution.md) | [简体中文](governed-command-execution.zh-CN.md)
+
 ## Data Flow
 
 ```text

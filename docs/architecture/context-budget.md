@@ -1,5 +1,7 @@
 # Deterministic Context Budget
 
+[English](context-budget.md) | [简体中文](context-budget.zh-CN.md)
+
 ## Purpose
 
 Every provider request passes through `ContextManager`. It bounds the request before network I/O
