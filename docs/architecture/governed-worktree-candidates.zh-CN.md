@@ -195,8 +195,7 @@ Adoption/Discard/Conflict/Cancellation；Adversarial Case 覆盖 Hostile Name、
 Alias、Link/Reparse、Path Swap、Dirty Parent、Stale Hash、Output Limit、Killed Git、
 Lease Exhaustion、Candidate/Blob Tamper、Rollback Failure 和 Cleanup Race。
 
-精确 Count、CI Run ID、Artifact Hash 与 Release Link 只在 Release Gate 后记录到
-`docs/learning/progress.md`。
+精确 Count、CI Run ID、Artifact Hash 与 Release Link 只在 Release Gate 后记录。
 
 ## 威胁边界与非承诺
 

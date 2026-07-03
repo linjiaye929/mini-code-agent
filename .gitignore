@@ -15,3 +15,5 @@ dist/
 .mini-code-agent/
 .idea/
 .vscode/
+/docs/learning/
+/docs/resume/

@@ -330,16 +330,6 @@ Worktree 路径分离和带回滚意识的 Adoption 不是 OS 沙箱或崩溃原
 
 ## 文档导航
 
-### 学习与面试
-
-- [学习知识地图](docs/learning/knowledge-map.md)
-- [学习进度与实现证据](docs/learning/progress.md)
-- [M7 CLI 与 Provider 学习笔记](docs/learning/m7-cli-provider-runtime.md)
-- [M8 Web 工作台学习笔记](docs/learning/m8-web-console.md)
-- [完整简历项目包](docs/resume/project-profile.md)
-- [M7 CLI 简历与面试说明](docs/resume/m7-cli-project-profile.md)
-- [M8 Web 工作台简历与面试说明](docs/resume/m8-web-console-profile.md)
-
 ### 核心架构
 
 - [Agent Core](docs/architecture/agent-core.zh-CN.md)

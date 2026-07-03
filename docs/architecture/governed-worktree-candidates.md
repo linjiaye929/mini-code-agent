@@ -227,7 +227,7 @@ The M6b test surface includes:
   inspection, and isolated artifact smoke.
 
 Exact counts, CI run IDs, artifact hashes, and release links are recorded only after the release
-gate in `docs/learning/progress.md`.
+gate.
 
 ## Threat Boundary and Non-Claims
 
